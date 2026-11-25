@@ -1114,6 +1114,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.PriceBandsJson).HasMaxLength(2000);
             entity.Property(x => x.DefaultKgPerLoad).HasPrecision(12, 1);
             entity.Property(x => x.TargetKgPerUnit).HasPrecision(8, 3);
+            entity.Property(x => x.WetAlertMoisturePct).HasPrecision(5, 2);
             entity.HasIndex(x => new { x.TenantId, x.FactoryId }).IsUnique();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);

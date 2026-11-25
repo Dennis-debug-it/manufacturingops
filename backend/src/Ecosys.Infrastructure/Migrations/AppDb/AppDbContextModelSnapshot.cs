@@ -13937,6 +13937,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("FactoryId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("LowCoverAlertSentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("LowCoverDays")
                         .HasColumnType("integer");
 
@@ -13965,6 +13968,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("WetAlertMoisturePct")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.HasKey("Id");
 

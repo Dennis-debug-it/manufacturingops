@@ -295,6 +295,115 @@ public sealed class WoodFuelTests
         Assert.Equal(1, supplier.Deliveries);
     }
 
+    // ------------------------------------------------------------------ alerts
+
+    [Fact]
+    public async Task ARejectedLoad_TellsTheSupervisors_WithTheSupplierAndTheReason()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var sent = new RecordingDispatcher();
+        var service = Service(db, sent);
+
+        await service.ReceiveAsync(site.TenantId, Weighed(site, 12_500, 5_300, [55]), Clerk);
+
+        var alert = Assert.Single(sent.Sent);
+        Assert.Equal(WoodFuelNotifications.DeliveryRejected, alert.Key);
+        Assert.Contains("Kiprop Woodlot", alert.Title);
+        Assert.Contains("above the 45% limit", alert.Body);
+        Assert.Equal("Chelal", alert.TemplateValues["Factory"]);
+        Assert.NotEmpty(alert.UserIds);
+        Assert.Equal(NotificationSeverities.Warning, alert.Severity);
+    }
+
+    [Fact]
+    public async Task WetWood_OnlyTellsAnyoneAtOrAboveTheAlertLevel()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var sent = new RecordingDispatcher();
+        var service = Service(db, sent);
+
+        await service.ReceiveAsync(site.TenantId, Weighed(site, 15_000, 5_000, [30]), Clerk);   // accepted, below 35 %
+        Assert.Empty(sent.Sent);
+
+        await service.ReceiveAsync(site.TenantId, Weighed(site, 15_000, 5_000, [36]), Clerk);   // accepted at 36 %: paid less
+        var alert = Assert.Single(sent.Sent);
+        Assert.Equal(WoodFuelNotifications.WetWood, alert.Key);
+        Assert.Contains("36%", alert.Title);
+        Assert.Contains("not paid", alert.Body);
+
+        await service.ReceiveAsync(site.TenantId, Weighed(site, 15_000, 5_000, [20]), Clerk);   // dry: nothing more
+        Assert.Single(sent.Sent);
+    }
+
+    [Fact]
+    public async Task LowCover_IsSentOncePerDip_AndAgainOnlyAfterCoverRecovers()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var sent = new RecordingDispatcher();
+        var service = Service(db, sent);
+        db.WoodFuelSettings.Add(new WoodFuelSettings { TenantId = site.TenantId, FactoryId = site.FactoryId, BurnWindowDays = 1, LowCoverDays = 3 });
+        await db.SaveChangesAsync();
+
+        await service.ReceiveAsync(site.TenantId, Weighed(site, 15_000, 5_000, [20]), Clerk);                       // 10 t
+        await service.IssueAsync(site.TenantId, new NewWoodIssue(site.FactoryId, site.BoilerId, site.StackId, 2000m, null, null, null, null), Clerk); // 8 t at 2 t a day: 4 days
+        Assert.Empty(sent.Sent.Where(x => x.Key == WoodFuelNotifications.LowCover));
+
+        await service.IssueAsync(site.TenantId, new NewWoodIssue(site.FactoryId, site.BoilerId, site.StackId, 3000m, null, null, null, null), Clerk); // 5 t at 5 t a day: 1 day
+        var first = Assert.Single(sent.Sent, x => x.Key == WoodFuelNotifications.LowCover);
+        Assert.Equal(NotificationSeverities.Warning, first.Severity);
+        Assert.Contains("5 t", first.Body);
+        Assert.NotNull((await db.WoodFuelSettings.SingleAsync()).LowCoverAlertSentAt);
+
+        // Still low: no second alert for the same dip.
+        await service.IssueAsync(site.TenantId, new NewWoodIssue(site.FactoryId, site.BoilerId, site.StackId, 1000m, null, null, null, null), Clerk);
+        Assert.Single(sent.Sent, x => x.Key == WoodFuelNotifications.LowCover);
+
+        // A big delivery ends the dip and clears the flag ...
+        await service.ReceiveAsync(site.TenantId, Weighed(site, 60_000, 5_000, [20]), Clerk);
+        Assert.Null((await db.WoodFuelSettings.SingleAsync()).LowCoverAlertSentAt);
+
+        // ... so the next dip is told again, and under a day is critical.
+        await service.IssueAsync(site.TenantId, new NewWoodIssue(site.FactoryId, site.BoilerId, site.StackId, 50_000m, null, null, null, null), Clerk);
+        var again = sent.Sent.Where(x => x.Key == WoodFuelNotifications.LowCover).ToList();
+        Assert.Equal(2, again.Count);
+        Assert.Equal(NotificationSeverities.Critical, again[1].Severity);
+    }
+
+    [Fact]
+    public async Task ADeliveryIsKept_EvenWhenTheAlertCannotBeSent()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var service = Service(db, new ThrowingDispatcher());
+
+        var delivery = await service.ReceiveAsync(site.TenantId, Weighed(site, 12_500, 5_300, [55]), Clerk);
+
+        Assert.Equal(WoodDecisions.Rejected, delivery.Decision);
+        Assert.Equal(1, await db.WoodDeliveries.CountAsync());
+    }
+
+    [Fact]
+    public async Task TheWetWoodAlertLevel_StaysBetweenTheBaseAndTheRejectLimit()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var manager = Controller(db, site, PermissionNames.WoodFuelManage);
+
+        var saved = (WoodSettingsDto)((OkObjectResult)(await manager.SaveSettings(Settings(site) with { WetAlertMoisturePct = 38m }, default)).Result!).Value!;
+        Assert.Equal(38m, saved.WetAlertMoisturePct);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => manager.SaveSettings(Settings(site) with { WetAlertMoisturePct = 50m }, default));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => manager.SaveSettings(Settings(site) with { WetAlertMoisturePct = 20m }, default));
+
+        // Left out, it is kept, and brought inside new limits.
+        var kept = (WoodSettingsDto)((OkObjectResult)(await manager.SaveSettings(Settings(site), default)).Result!).Value!;
+        Assert.Equal(38m, kept.WetAlertMoisturePct);
+        var narrowed = (WoodSettingsDto)((OkObjectResult)(await manager.SaveSettings(Settings(site) with { RejectMoisturePct = 36m }, default)).Result!).Value!;
+        Assert.Equal(36m, narrowed.WetAlertMoisturePct);
+    }
+
     // ------------------------------------------------------------------ the module
 
     [Fact]
@@ -362,8 +471,24 @@ public sealed class WoodFuelTests
 
     private sealed record Site(Guid TenantId, Guid FactoryId, Guid OtherFactoryId, Guid StackId, Guid BoilerId, Guid SupplierId, FactoryTenantContext Context);
 
-    private static IWoodFuelService Service(AppDbContext db) =>
-        new WoodFuelService(db, new MeterReadingService(db), FactoryTestSupport.Scope(db, new FactoryTenantContext(Guid.NewGuid(), Guid.NewGuid())));
+    private static IWoodFuelService Service(AppDbContext db, INotificationDispatcher? dispatcher = null) =>
+        new WoodFuelService(db, new MeterReadingService(db), FactoryTestSupport.Scope(db, new FactoryTenantContext(Guid.NewGuid(), Guid.NewGuid())), dispatcher);
+
+    private sealed class RecordingDispatcher : INotificationDispatcher
+    {
+        public List<NotificationRequest> Sent { get; } = [];
+
+        public Task NotifyAsync(NotificationRequest request, CancellationToken cancellationToken = default)
+        {
+            Sent.Add(request);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingDispatcher : INotificationDispatcher
+    {
+        public Task NotifyAsync(NotificationRequest request, CancellationToken cancellationToken = default) => throw new InvalidOperationException("The mail server is down.");
+    }
 
     private static async Task<Site> SeedAsync(AppDbContext db)
     {

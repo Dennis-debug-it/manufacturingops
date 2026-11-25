@@ -47,15 +47,15 @@ public sealed class PatrolTests
         var site = await SeedAsync(db);
         var patrol = new PatrolService(db);
 
-        Assert.Equal(12, await patrol.SeedCheckpointsAsync(site.TenantId, site.FactoryId));
-        Assert.Equal("CP-012", (await db.Checkpoints.OrderBy(x => x.Code).LastAsync()).Code);
+        Assert.Equal(14, await patrol.SeedCheckpointsAsync(site.TenantId, site.FactoryId));
+        Assert.Equal("CP-014", (await db.Checkpoints.OrderBy(x => x.Code).LastAsync()).Code);
         Assert.Equal("Fuel and firewood store", (await db.Checkpoints.Include(x => x.AccessZone).SingleAsync(x => x.Code == "CP-008")).AccessZone!.Name);
         await Assert.ThrowsAsync<BusinessRuleException>(() => patrol.SeedCheckpointsAsync(site.TenantId, site.FactoryId));
 
         var added = await patrol.GenerateRunsAsync(site.TenantId, DateTime.UtcNow, TimeSpan.FromHours(24));
         Assert.InRange(added, 5, 7);
         Assert.Equal(0, await patrol.GenerateRunsAsync(site.TenantId, DateTime.UtcNow, TimeSpan.FromHours(24)));
-        Assert.All(await db.PatrolRuns.ToListAsync(), x => Assert.Equal((12, PatrolRunStatuses.Due), (x.RequiredCount, x.Status)));
+        Assert.All(await db.PatrolRuns.ToListAsync(), x => Assert.Equal((14, PatrolRunStatuses.Due), (x.RequiredCount, x.Status)));
     }
 
     // ------------------------------------------------------------------ scans

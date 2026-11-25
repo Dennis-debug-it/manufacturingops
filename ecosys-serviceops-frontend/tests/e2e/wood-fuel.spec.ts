@@ -7,7 +7,7 @@ const FACTORY = 'factory-1'
 
 const settings = {
   factoryId: FACTORY, defaultMeasureBasis: 'Weighbridge', moistureRule: 'DeductKg', baseMoisturePct: 25, rejectMoisturePct: 45, deductionPctPerPoint: 1.5,
-  priceBands: [{ upToPct: 30, percentOfPrice: 100 }], defaultKgPerLoad: null, burnWindowDays: 14, lowCoverDays: 5, seasoningDays: 28, targetKgPerUnit: 1.6,
+  priceBands: [{ upToPct: 30, percentOfPrice: 100 }], defaultKgPerLoad: null, burnWindowDays: 14, lowCoverDays: 5, seasoningDays: 28, targetKgPerUnit: 1.6, wetAlertMoisturePct: 35,
 }
 
 const lookups = {

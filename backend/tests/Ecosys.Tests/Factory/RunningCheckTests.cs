@@ -52,8 +52,8 @@ public sealed class RunningCheckTests
         var checks = Controller(db, site.Context);
 
         var templates = Ok(await checks.Templates(CancellationToken.None));
-        Assert.Equal(6, templates.Count);
-        Assert.Equal(6, Ok(await checks.Templates(CancellationToken.None)).Count);
+        Assert.Equal(8, templates.Count);
+        Assert.Equal(8, Ok(await checks.Templates(CancellationToken.None)).Count);
         var dryer = templates.Single(x => x.Name == "Fluid bed dryer shift check");
         Assert.Equal(site.DryerClass, dryer.AssetCategoryId);
         Assert.Equal(CheckFrequencies.PerShift, dryer.SuggestedFrequency);

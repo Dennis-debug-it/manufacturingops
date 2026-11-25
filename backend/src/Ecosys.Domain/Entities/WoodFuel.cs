@@ -123,6 +123,10 @@ public sealed class WoodFuelSettings : AuditableEntity, ITenantEntity
     public int SeasoningDays { get; set; } = 28;
     /// <summary>Wood a factory aims to burn per unit it makes (kg wood per kg made tea).</summary>
     public decimal? TargetKgPerUnit { get; set; }
+    /// <summary>An accepted load at least this wet (percent) tells the factory's supervisors; between the base moisture and the reject limit.</summary>
+    public decimal WetAlertMoisturePct { get; set; } = 35m;
+    /// <summary>When the low-cover alert went for the current dip; cleared once cover is back above the limit.</summary>
+    public DateTime? LowCoverAlertSentAt { get; set; }
 
     public Tenant? Tenant { get; set; }
     public OrgNode? Factory { get; set; }

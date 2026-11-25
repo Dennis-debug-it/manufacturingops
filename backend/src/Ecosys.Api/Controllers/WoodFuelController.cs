@@ -121,6 +121,17 @@ public sealed class WoodFuelController(
         settings.LowCoverDays = request.LowCoverDays;
         settings.SeasoningDays = request.SeasoningDays;
         settings.TargetKgPerUnit = request.TargetKgPerUnit;
+        if (request.WetAlertMoisturePct is { } wetAlert)
+        {
+            if (wetAlert < request.BaseMoisturePct || wetAlert > request.RejectMoisturePct) throw new BusinessRuleException("The wet-wood alert must be between the base moisture and the reject limit.");
+            settings.WetAlertMoisturePct = wetAlert;
+        }
+        else
+        {
+            // Not sent: keep the alert level, brought inside the limits if they moved.
+            settings.WetAlertMoisturePct = Math.Min(request.RejectMoisturePct, Math.Max(request.BaseMoisturePct, settings.WetAlertMoisturePct));
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(settings));
     }
@@ -495,7 +506,7 @@ public sealed class WoodFuelController(
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static WoodSettingsDto ToDto(WoodFuelSettings s) => new(s.FactoryId, s.DefaultMeasureBasis, s.MoistureRule, s.BaseMoisturePct, s.RejectMoisturePct, s.DeductionPctPerPoint,
-        WoodFuelRules.ParseBands(s.PriceBandsJson), s.DefaultKgPerLoad, s.BurnWindowDays, s.LowCoverDays, s.SeasoningDays, s.TargetKgPerUnit);
+        WoodFuelRules.ParseBands(s.PriceBandsJson), s.DefaultKgPerLoad, s.BurnWindowDays, s.LowCoverDays, s.SeasoningDays, s.TargetKgPerUnit, s.WetAlertMoisturePct);
 
     private static WoodSupplierDto ToDto(FuelSupplier s, bool canSeePayment) => new(s.Id, s.Name, s.Type, s.Phone, canSeePayment ? s.PaymentDetails : null, canSeePayment ? s.KraPin : null,
         s.IdLast4, s.SourceArea, s.PermitNumber, s.PermitExpiresOn, s.PermitExpiresOn is { } due && due < DateTime.UtcNow.Date, s.Notes, s.IsActive);
@@ -516,9 +527,9 @@ public sealed record WoodSpeciesRow(Guid Id, string Name, decimal KgPerStackedM3
 public sealed record SaveSpeciesRequest([StringLength(100)] string Name, decimal KgPerStackedM3, decimal? EnergyMjPerKg = null, bool? IsActive = null);
 
 public sealed record WoodSettingsDto(Guid FactoryId, string DefaultMeasureBasis, string MoistureRule, decimal BaseMoisturePct, decimal RejectMoisturePct, decimal DeductionPctPerPoint,
-    IReadOnlyList<WoodPriceBand> PriceBands, decimal? DefaultKgPerLoad, int BurnWindowDays, int LowCoverDays, int SeasoningDays, decimal? TargetKgPerUnit);
+    IReadOnlyList<WoodPriceBand> PriceBands, decimal? DefaultKgPerLoad, int BurnWindowDays, int LowCoverDays, int SeasoningDays, decimal? TargetKgPerUnit, decimal WetAlertMoisturePct);
 public sealed record SaveWoodSettingsRequest(Guid FactoryId, string DefaultMeasureBasis, string MoistureRule, decimal BaseMoisturePct, decimal RejectMoisturePct, decimal DeductionPctPerPoint,
-    IReadOnlyList<WoodPriceBand>? PriceBands, decimal? DefaultKgPerLoad, int BurnWindowDays, int LowCoverDays, int SeasoningDays, decimal? TargetKgPerUnit);
+    IReadOnlyList<WoodPriceBand>? PriceBands, decimal? DefaultKgPerLoad, int BurnWindowDays, int LowCoverDays, int SeasoningDays, decimal? TargetKgPerUnit, decimal? WetAlertMoisturePct = null);
 
 public sealed record WoodLookups(
     IReadOnlyList<WoodNamed> Factories, Guid? FactoryId, IReadOnlyList<WoodSpeciesRow> Species, IReadOnlyList<WoodNamed> Suppliers, IReadOnlyList<WoodNamed> Stacks,

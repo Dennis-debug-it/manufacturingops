@@ -3,8 +3,17 @@ using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Errors;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Ecosys.Infrastructure.Services.Factory;
+
+/// <summary>The notification keys wood fuel sends; each is in the notification catalogue and has an email template.</summary>
+public static class WoodFuelNotifications
+{
+    public const string LowCover = "woodfuel.low-cover";
+    public const string DeliveryRejected = "woodfuel.delivery-rejected";
+    public const string WetWood = "woodfuel.wet-wood";
+}
 
 /// <summary>One step of the PriceBands rule: loads up to this moisture are paid at this share of the price.</summary>
 public sealed record WoodPriceBand(decimal UpToPct, decimal PercentOfPrice);
@@ -204,7 +213,12 @@ public interface IWoodFuelService
     Task<WoodYardSummary> SummaryAsync(Guid tenantId, Guid factoryId, DateTime from, DateTime to, CancellationToken cancellationToken = default);
 }
 
-internal sealed class WoodFuelService(AppDbContext dbContext, IMeterReadingService meterReadings, IOrgScopeService orgScope) : IWoodFuelService
+internal sealed class WoodFuelService(
+    AppDbContext dbContext,
+    IMeterReadingService meterReadings,
+    IOrgScopeService orgScope,
+    INotificationDispatcher? notificationDispatcher = null,
+    ILogger<WoodFuelService>? logger = null) : IWoodFuelService
 {
     /// <summary>Usual kinds of wood, with a first guess of what a stacked cubic metre weighs. To be confirmed with the factory.</summary>
     private static readonly (string Name, decimal Kg)[] DefaultSpecies =
@@ -335,6 +349,7 @@ internal sealed class WoodFuelService(AppDbContext dbContext, IMeterReadingServi
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await AlertAfterDeliveryAsync(tenantId, delivery, supplier?.Name, settings, cancellationToken);
         return delivery;
     }
 
@@ -383,7 +398,109 @@ internal sealed class WoodFuelService(AppDbContext dbContext, IMeterReadingServi
 
         issue.MeterReadingId = await RecordOnMeterAsync(tenantId, asset, kg.Value, issuedAt, actor, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await CheckCoverAsync(tenantId, i.FactoryId, settings, cancellationToken);
         return issue;
+    }
+
+    /// <summary>
+    /// Tells the factory's supervisors about a rejected load, or about an accepted one at least as wet as the
+    /// alert level, then re-checks the cover (a delivery may have ended a dip). The delivery is saved by now,
+    /// so a failure here is logged and never undoes it.
+    /// </summary>
+    private async Task AlertAfterDeliveryAsync(Guid tenantId, WoodDelivery delivery, string? supplierName, WoodFuelSettings settings, CancellationToken cancellationToken)
+    {
+        if (notificationDispatcher is null) return;
+        try
+        {
+            var rejected = delivery.Decision == WoodDecisions.Rejected;
+            var wet = !rejected && delivery.AverageMoisturePct is { } moisture && moisture >= settings.WetAlertMoisturePct;
+            if (rejected || wet)
+            {
+                var recipients = await FactoryRecipients.SupervisorsAsync(dbContext, tenantId, delivery.FactoryId, cancellationToken);
+                if (recipients.Count > 0)
+                {
+                    var factory = await dbContext.OrgNodes.AsNoTracking().Where(x => x.Id == delivery.FactoryId).Select(x => x.Name).SingleAsync(cancellationToken);
+                    var supplier = supplierName ?? "an unlisted supplier";
+                    var vehicle = delivery.VehicleRegistration ?? "no vehicle recorded";
+                    var weight = $"{delivery.NetKg:0.#} kg";
+                    var values = new Dictionary<string, string?>
+                    {
+                        ["Delivery"] = delivery.DeliveryNumber, ["Supplier"] = supplier, ["Vehicle"] = vehicle, ["Factory"] = factory, ["Weight"] = weight,
+                    };
+                    if (rejected)
+                    {
+                        values["Reason"] = delivery.DecisionReason ?? "No reason was given.";
+                        await notificationDispatcher.NotifyAsync(new NotificationRequest(tenantId, WoodFuelNotifications.DeliveryRejected, recipients.ToList(),
+                            $"Wood load rejected: {supplier}", $"{delivery.DeliveryNumber}: {weight} from {supplier} ({vehicle}) was rejected. {values["Reason"]}",
+                            "/wood-fuel?tab=deliveries", nameof(WoodDelivery), delivery.Id, values, NotificationSeverities.Warning), cancellationToken);
+                    }
+                    else
+                    {
+                        values["Moisture"] = $"{delivery.AverageMoisturePct:0.#}%";
+                        values["Payment"] = delivery.DecisionReason ?? "It was accepted and paid in full.";
+                        await notificationDispatcher.NotifyAsync(new NotificationRequest(tenantId, WoodFuelNotifications.WetWood, recipients.ToList(),
+                            $"Wet wood from {supplier}: {values["Moisture"]}", $"{delivery.DeliveryNumber}: {weight} from {supplier} averaged {values["Moisture"]} moisture. {values["Payment"]}",
+                            "/wood-fuel?tab=deliveries", nameof(WoodDelivery), delivery.Id, values, NotificationSeverities.Info), cancellationToken);
+                    }
+                }
+            }
+
+            await CheckCoverAsync(tenantId, delivery.FactoryId, settings, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger?.LogWarning(ex, "Wood fuel alerts for delivery {Delivery} could not be sent.", delivery.DeliveryNumber);
+        }
+    }
+
+    /// <summary>
+    /// Sends the low-cover alert once per dip: when the days of cover at the recent burn fall below the
+    /// factory's limit, and again only after cover has been back above it. A delivery that restores the
+    /// cover clears the flag.
+    /// </summary>
+    private async Task CheckCoverAsync(Guid tenantId, Guid factoryId, WoodFuelSettings settings, CancellationToken cancellationToken)
+    {
+        if (notificationDispatcher is null) return;
+        try
+        {
+            var window = Math.Max(1, settings.BurnWindowDays);
+            var since = DateTime.UtcNow.AddDays(-window);
+            var burnt = -(await dbContext.WoodStockMovements.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.FactoryId == factoryId && x.Kind == WoodMovementKinds.Issue && x.OccurredAt >= since)
+                .SumAsync(x => (decimal?)x.KgChange, cancellationToken) ?? 0m);
+            var stock = await StockKgAsync(tenantId, factoryId, null, cancellationToken);
+            decimal? daily = burnt > 0 ? burnt / window : null;
+            decimal? cover = daily is > 0 ? stock / daily.Value : null;
+            var low = cover is { } days && days < settings.LowCoverDays;
+
+            if (low && settings.LowCoverAlertSentAt is null)
+            {
+                if (dbContext.Entry(settings).State == EntityState.Detached) dbContext.WoodFuelSettings.Add(settings);
+                settings.LowCoverAlertSentAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                var recipients = await FactoryRecipients.SupervisorsAsync(dbContext, tenantId, factoryId, cancellationToken);
+                if (recipients.Count == 0) return;
+                var factory = await dbContext.OrgNodes.AsNoTracking().Where(x => x.Id == factoryId).Select(x => x.Name).SingleAsync(cancellationToken);
+                var coverText = cover!.Value < 1 ? "under a day" : $"{cover.Value:0.#} days";
+                await notificationDispatcher.NotifyAsync(new NotificationRequest(tenantId, WoodFuelNotifications.LowCover, recipients.ToList(),
+                    $"Wood at {factory}: {coverText} left", $"{stock / 1000m:0.#} t of wood is left at about {daily!.Value:0} kg a day: {coverText}. The limit is {settings.LowCoverDays} days.",
+                    "/wood-fuel", nameof(WoodFuelSettings), settings.Id,
+                    new Dictionary<string, string?>
+                    {
+                        ["Factory"] = factory, ["Stock"] = $"{stock / 1000m:0.#} t", ["DailyBurn"] = $"{daily.Value:0} kg", ["Cover"] = coverText, ["LimitDays"] = settings.LowCoverDays.ToString(),
+                    },
+                    cover.Value < 1 ? NotificationSeverities.Critical : NotificationSeverities.Warning), cancellationToken);
+            }
+            else if (!low && settings.LowCoverAlertSentAt is not null)
+            {
+                settings.LowCoverAlertSentAt = null;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger?.LogWarning(ex, "The wood cover alert for factory {Factory} could not be sent.", factoryId);
+        }
     }
 
     /// <summary>

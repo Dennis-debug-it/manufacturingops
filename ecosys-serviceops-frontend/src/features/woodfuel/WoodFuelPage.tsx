@@ -464,11 +464,12 @@ function SettingsTab({ lookups, factoryId }: { lookups: WoodLookups; factoryId: 
   const [cover, setCover] = useState(String(s?.lowCoverDays ?? 5))
   const [seasoning, setSeasoning] = useState(String(s?.seasoningDays ?? 28))
   const [target, setTarget] = useState(s?.targetKgPerUnit ? String(s.targetKgPerUnit) : '')
+  const [wetAlert, setWetAlert] = useState(String(s?.wetAlertMoisturePct ?? 35))
 
   const submit = async () => {
     const payload: WoodSettings = {
       factoryId, defaultMeasureBasis: basis, moistureRule: rule, baseMoisturePct: Number(base), rejectMoisturePct: Number(reject), deductionPctPerPoint: Number(deduction),
-      priceBands: bands, defaultKgPerLoad: numberOrNull(perLoad), burnWindowDays: Number(window), lowCoverDays: Number(cover), seasoningDays: Number(seasoning), targetKgPerUnit: numberOrNull(target),
+      priceBands: bands, defaultKgPerLoad: numberOrNull(perLoad), burnWindowDays: Number(window), lowCoverDays: Number(cover), seasoningDays: Number(seasoning), targetKgPerUnit: numberOrNull(target), wetAlertMoisturePct: Number(wetAlert),
     }
     try {
       await save.mutateAsync(payload)
@@ -519,6 +520,7 @@ function SettingsTab({ lookups, factoryId }: { lookups: WoodLookups; factoryId: 
         <Field label="Warn when cover falls below (days)"><input className={inputClass} inputMode="numeric" value={cover} onChange={(e) => setCover(e.target.value)} /></Field>
         <Field label="A new stack seasons for (days)"><input className={inputClass} inputMode="numeric" value={seasoning} onChange={(e) => setSeasoning(e.target.value)} /></Field>
         <Field label="Aim to burn (kg wood per kg made tea)"><input className={inputClass} inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} /></Field>
+        <Field label="Tell supervisors about wood wetter than (%)" hint="Between the base moisture and the reject limit. Rejected loads and low cover are always told."><input className={inputClass} inputMode="decimal" value={wetAlert} onChange={(e) => setWetAlert(e.target.value)} /></Field>
       </div>
       <button type="button" className={primaryButton} disabled={save.isPending} onClick={() => void submit()}>Save settings</button>
     </div>

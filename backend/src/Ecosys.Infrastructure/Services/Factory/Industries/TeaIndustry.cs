@@ -35,6 +35,7 @@ internal static class TeaIndustry
                 new("SORT", "Sorting and grading", "Fibre extractors, sorters and grading machines"),
                 new("PACK", "Packing and dispatch", "Packing machines, stores and dispatch"),
                 new("BOIL", "Boiler house", "Boilers, feed water and fuel handling"),
+                new("WOOD", "Wood yard", "Firewood stacks, the wood weighbridge and fuel feeding to the boilers"),
                 new("UTIL", "Power and utilities", "Generators, transformers, compressors and small hydro"),
             ],
         AssetClasses =
@@ -109,6 +110,13 @@ internal static class TeaIndustry
                     new("Fuel", "Dropdown", Options: "Firewood,Briquettes,Furnace oil,Coal"),
                     new("Registration number", "Text"),
                     new("Certificate expiry", "Date"),
+                ]),
+                new("TEA-WYD", "Wood yard", Steam, "B", 3, [],
+                [
+                    new("Yard capacity", "Number", "t"),
+                    new("Number of stacks", "Number"),
+                    new("Fire hydrant or water point", "Dropdown", Options: "Yes,No"),
+                    new("Rain cover for seasoning stacks", "Dropdown", Options: "Yes,No"),
                 ]),
                 new("TEA-GEN", "Generator", Power, "A", 3, [MeterTypes.RunHours],
                 [
@@ -214,6 +222,22 @@ internal static class TeaIndustry
                 new("Fuel (firewood) stock enough for next shift", "yesno"),
                 new("Boiler run hours", "reading", Unit: "h", Meter: MeterTypes.RunHours, Required: false),
             ]),
+            new("Boiler fuel feed", "TEA-BLR", CheckFrequencies.PerShift,
+            [
+                new("Wood at the feed is dry enough to burn well", "passfail", Window),
+                new("Moisture of wood at the feed", "reading", Window, "%", Max: 40, Required: false),
+                new("Fuel hopper and feed free of blockage", "passfail", WO),
+                new("No clinker building up on the grate", "passfail", Window),
+                new("Day stock of wood enough for the next shift", "yesno"),
+            ]),
+            new("Wood yard daily check", "TEA-WYD", CheckFrequencies.Daily,
+            [
+                new("Fire breaks between stacks clear", "passfail", WO),
+                new("No smoke or smouldering in any stack", "passfail", WO),
+                new("Extinguishers and water point accessible", "passfail", WO),
+                new("Stacks stable and within the height limit", "passfail", Window),
+                new("Wet wood kept apart from seasoned wood", "yesno"),
+            ]),
             new("Compressor daily check", "TEA-CMP", CheckFrequencies.Daily,
             [
                 new("Discharge pressure", "reading", WO, "bar", 6, 8),
@@ -290,6 +314,10 @@ internal static class TeaIndustry
             new(P, "BLR-LOW", "Low steam pressure", "TEA-BLR"),
             new(P, "BLR-WTR", "Low water level trip", "TEA-BLR"),
             new(P, "WB-CAL", "Weighbridge reading out of calibration", "TEA-WB"),
+            new(P, "BLR-FEED", "Fuel feed blocked or jammed", "TEA-BLR"),
+            new(P, "BLR-CLNK", "Clinker building up on the grate", "TEA-BLR"),
+            new(P, "BLR-WET", "Steam output down from wet fuel", "TEA-BLR"),
+            new(P, "WYD-FIRE", "Fire or smouldering in a wood stack", "TEA-WYD"),
         ],
         Compliance =
         [
@@ -318,6 +346,7 @@ internal static class TeaIndustry
             new("Packing and finished goods", AccessZoneLevels.Restricted, true, true, false, "Hairnet, Dust coat"),
             new("Boiler house", AccessZoneLevels.Restricted, true, true, false, "Safety boots, Ear protection"),
             new("Fuel and firewood store", AccessZoneLevels.Restricted, true, true, false, "Safety boots"),
+            new("Wood yard", AccessZoneLevels.Restricted, true, true, false, "Safety boots, Reflective vest"),
             new("Electrical substation", AccessZoneLevels.Restricted, true, true, true, "Safety boots, Insulated gloves"),
         ],
         Checkpoints =
@@ -334,6 +363,9 @@ internal static class TeaIndustry
             new("Electrical substation", "Electrical substation", "Fence and gate intact?"),
             new("Water treatment plant", null, null),
             new("Perimeter fence", null, "Fence intact, no breaches?\nSecurity lights working?"),
+            // Added later, so they come last and the numbering of the checkpoints above does not change.
+            new("Wood yard stacks", "Wood yard", "No smoke or smouldering in any stack?\nFire breaks between stacks clear?"),
+            new("Wood yard fire point", "Wood yard", "Extinguishers in place and sealed?\nWater point working?"),
         ],
     };
 }

@@ -335,7 +335,7 @@ public sealed class VisitorTests
         await using var db = FactoryTestSupport.CreateDbContext();
         var site = await SeedAsync(db, seedZones: false);
         var visitors = Service(db);
-        Assert.Equal(10, await visitors.SeedZonesAsync(site.TenantId, site.FactoryId));
+        Assert.Equal(11, await visitors.SeedZonesAsync(site.TenantId, site.FactoryId));
         Assert.Equal(2, await db.AccessZones.CountAsync(x => x.Level == AccessZoneLevels.Public));
         await Assert.ThrowsAsync<BusinessRuleException>(() => visitors.SeedZonesAsync(site.TenantId, site.FactoryId));
     }

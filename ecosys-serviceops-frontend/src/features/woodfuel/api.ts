@@ -28,6 +28,7 @@ export interface WoodSettings {
   lowCoverDays: number
   seasoningDays: number
   targetKgPerUnit: number | null
+  wetAlertMoisturePct: number
 }
 
 export interface WoodLookups {

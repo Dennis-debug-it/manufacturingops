@@ -59,13 +59,13 @@ public sealed class IndustryPackTests
     {
         var tea = IndustryTemplates.Tea;
         Assert.Equal(("kg made tea", "kg MT"), (tea.ProductionUnit, tea.ProductionUnitShort));
-        Assert.Equal(9, tea.Sections.Count);
+        Assert.Equal(10, tea.Sections.Count);
         Assert.All(tea.AssetClasses, x => Assert.StartsWith("TEA-", x.Code));
-        Assert.Equal(["Withering fan shift check", "CTC machine shift check", "Fluid bed dryer shift check", "Boiler shift log", "Compressor daily check", "Generator daily check"],
+        Assert.Equal(["Withering fan shift check", "CTC machine shift check", "Fluid bed dryer shift check", "Boiler shift log", "Boiler fuel feed", "Wood yard daily check", "Compressor daily check", "Generator daily check"],
             tea.RunningChecks.Select(x => x.Name));
         Assert.Equal(7, tea.WindowRoutines.Count);
         Assert.Equal(13, tea.Compliance.Count);
-        Assert.Equal((10, 12, 10), (tea.Zones.Count, tea.Checkpoints.Count, tea.FailureCodes.Count));
+        Assert.Equal((11, 14, 14), (tea.Zones.Count, tea.Checkpoints.Count, tea.FailureCodes.Count));
         Assert.Equal("low-crop shutdown", tea.Vocabulary.OverhaulSeason);
         Assert.DoesNotContain(FailureCodeTemplates.Iso, x => x.AssetClassCode is not null);
     }
