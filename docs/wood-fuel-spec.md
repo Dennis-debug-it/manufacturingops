@@ -317,10 +317,10 @@ part that makes the manager's case for the add-on, but it needs made-tea data (d
 
 ---
 
-## 14b. Build status (Nov 24, 2026)
+## 14b. Build status (Nov 25, 2026)
 
-W1–W3 and the core of W4 are built and tested: 18 backend tests, 9 unit tests on the screen's arithmetic,
-and 4 browser tests against the real screens (including a delivery saved with the network off).
+W1–W3 and the core of W4 are built and tested: 28 backend tests, 9 unit tests on the screen's arithmetic,
+and 6 browser tests against the real screens (including a delivery saved with the network off).
 
 Built as specified:
 
@@ -337,6 +337,21 @@ Built as specified:
 - Suppliers (only the last four of a national ID kept), price agreements (most specific wins), a CSV of
   deliveries for finance. No supplier statements, as decided.
 - Receiving and feeding work with no signal through the existing outbox.
+- **Notifications** to the factory's supervisors, each with its own notification key so people choose
+  their channels: a **rejected load** (supplier, vehicle, weight, reason), **wet wood** (an accepted load
+  at or above the factory's alert level, default 35%, with how it was paid) and **low cover**, once per
+  dip, cleared when a delivery brings cover back up so the next dip is told again; under a day is
+  critical. They are sent after the delivery or issue is saved, so a failure never undoes it.
+- **The gate link.** A clerk picks the truck from the gate log (Delivery and Collection vehicles inside
+  now); the registration and driver are filled in. For a weighbridge delivery the clerk can save the
+  *weigh-in* and finish it at the tare: the delivery is *Awaiting tare*, nothing is in the ledger and
+  nothing is payable until it is weighed out. The gate's vehicle register shows the waiting delivery
+  and **refuses to let the truck out** until it is weighed out; a visitor manager can override. A truck
+  turned away is closed out with no tare. A vehicle must have come in at the delivery's own factory.
+- **Tea pack extras:** a *Wood yard* section, a *Wood yard* asset class with a daily fire and stack
+  check, a *Boiler fuel feed* check, four failure codes, a *Wood yard* access zone, and two fire patrol
+  checkpoints (added last so existing checkpoint numbers do not change). The pack already had a
+  firewood store zone and checkpoint, which are kept.
 
 Built differently from this spec:
 
@@ -345,19 +360,18 @@ Built differently from this spec:
 - A stack's seasoning clock restarts when wood is added to it; its status is changed by hand, and the
   yard board shows *Ready (dry enough)* once the date has passed.
 - Counting is open to yard clerks as well as managers, because the difference is posted at once.
+- Alerts go to the factory's supervisors (admins and roles that may assign work orders, limited to the
+  factory they can see), not to people who were granted a wood fuel permission through a group.
 
 Not built yet:
 
-- Low-cover, rejected-load, wet-wood and unexplained-loss **alerts**. The yard board shows low cover; no
-  notification is sent.
+- An unexplained-loss alert (the yard board shows the gap).
 - Wood per unit on the factory KPI page and the group dashboard (the figures are on the yard board).
 - The sourcing report for auditors and photos on a delivery.
-- Linking a delivery to the gate's vehicle log and holding the truck until its second weighing; the link
-  field exists but no screen sets it.
-- The tea pack additions (wood yard section, fire patrol checkpoints, boiler fuel feed check).
 - Own-woodlot harvest and replanting records; a CSV import for made tea.
-- A PostgreSQL translation test for the new queries (it needs the database the other `*_AllTranslate`
-  tests use).
+- Wood yard extras in the demo workspace.
+- PostgreSQL translation tests for the new queries (they need the database the other `*_AllTranslate`
+  tests use). The gate register query was also changed and its existing translation test could not run here.
 
 ## 15. Recommendation
 

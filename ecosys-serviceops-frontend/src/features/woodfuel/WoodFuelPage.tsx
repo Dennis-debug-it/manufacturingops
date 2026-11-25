@@ -14,9 +14,9 @@ import { numberOrNull, textOrNull, todayInput } from '../../shared/components/fo
 import {
   DECISION_LABEL, FORM_LABEL, MEASURE_LABEL, REASON_LABEL, RULE_LABEL, STACK_STATUS_LABEL, SUPPLIER_TYPE_LABEL,
   downloadDeliveries, useCounts, useDeliveries, useIssues, usePrices, useProduction, useSaveProduction, useSaveSettings, useSaveSpecies,
-  useSuppliers, useWoodLookups, useYardSummary, type PriceBand, type WoodLookups, type WoodSettings,
+  useSuppliers, useWoodLookups, useYardSummary, type PriceBand, type WoodDelivery, type WoodLookups, type WoodSettings,
 } from './api'
-import { CountStackDrawer, IssueWoodDrawer, PriceDrawer, ReceiveWoodDrawer, StackDrawer, SupplierDrawer } from './forms'
+import { CountStackDrawer, IssueWoodDrawer, PriceDrawer, ReceiveWoodDrawer, StackDrawer, SupplierDrawer, WeighOutDrawer } from './forms'
 import { coverLabel, tonnes } from './logic'
 
 const TABS = [
@@ -29,7 +29,7 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]['id']
 
-const DECISION_TONE: Record<string, BadgeTone> = { Accepted: 'success', AcceptedWithDeduction: 'warning', Rejected: 'danger' }
+const DECISION_TONE: Record<string, BadgeTone> = { Accepted: 'success', AcceptedWithDeduction: 'warning', Rejected: 'danger', Pending: 'info' }
 const STACK_TONE: Record<string, BadgeTone> = { Receiving: 'info', Seasoning: 'warning', Ready: 'success', Depleted: 'neutral' }
 const kgText = (value: number) => `${formatNumber(Math.round(value * 10) / 10)} kg`
 
@@ -154,6 +154,7 @@ function YardTab({ lookups, factoryId }: { lookups: WoodLookups; factoryId: stri
         <StatCard label="Rejected" value={tonnes(s.rejectedKg)} tone={s.rejectedKg > 0 ? 'warning' : 'default'} />
       </div>
       {s.lowCover ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Only {coverLabel(s.daysOfCover)} of wood is left at the recent burn of {kgText(s.averageDailyBurnKg ?? 0)} a day. Order more or bring forward the next delivery.</p> : null}
+      {s.awaitingTare > 0 ? <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">{s.awaitingTare} {s.awaitingTare === 1 ? 'truck is' : 'trucks are'} weighed in and waiting for the tare. Finish {s.awaitingTare === 1 ? 'it' : 'them'} under Deliveries; the gate holds the truck until then.</p> : null}
       {s.madeTeaKg === 0 ? <p className="text-sm text-slate-500">Enter the days’ made tea under “Made tea” to see wood per kg of made tea and its cost.</p> : null}
       {s.unstackedKg !== 0 ? <p className="text-sm text-slate-500">{kgText(s.unstackedKg)} was received without a stack.</p> : null}
 
@@ -234,7 +235,9 @@ function DeliveriesTab({ lookups, factoryId }: { lookups: WoodLookups; factoryId
   const [decision, setDecision] = useState('')
   const [receiving, setReceiving] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
+  const [weighing, setWeighing] = useState<WoodDelivery | null>(null)
   const deliveries = useDeliveries({ factoryId, days, q, decision })
+  const awaiting = useDeliveries({ factoryId, days: 30, decision: 'Pending' })
 
   const exportCsv = async () => {
     try {
@@ -260,6 +263,20 @@ function DeliveriesTab({ lookups, factoryId }: { lookups: WoodLookups; factoryId
           {lookups.canReceive ? <button type="button" className={primaryButton} onClick={() => setReceiving(true)}><Plus className="h-4 w-4" />Receive wood</button> : null}
         </div>
       </div>
+
+      {(awaiting.data ?? []).length > 0 ? (
+        <Section title="Waiting for the tare">
+          <Table head={['Number', 'Weighed in', 'Supplier', 'Vehicle', 'Gross kg', '']}>
+            {(awaiting.data ?? []).map((x) => (
+              <tr key={x.id}>
+                <Cell><span className="font-mono text-xs">{x.deliveryNumber}</span></Cell><Cell>{formatDateTime(x.receivedAt)}</Cell><Cell>{x.supplier || '—'}</Cell><Cell>{x.vehicleRegistration || '—'}</Cell>
+                <Cell right>{formatNumber(x.grossKg ?? 0)}</Cell>
+                <Cell><div className="flex justify-end">{lookups.canReceive ? <button type="button" className={primaryButton} onClick={() => setWeighing(x)}>Weigh out</button> : null}</div></Cell>
+              </tr>
+            ))}
+          </Table>
+        </Section>
+      ) : null}
 
       {deliveries.isLoading ? <Spinner label="Loading deliveries" /> : (
         <Table head={['Number', 'Received', 'Supplier', 'Vehicle', 'Kg', 'Moisture', 'Decision', 'Payable kg', 'Amount']} empty={(deliveries.data ?? []).length === 0 ? 'No deliveries in this period.' : undefined}>
@@ -301,6 +318,7 @@ function DeliveriesTab({ lookups, factoryId }: { lookups: WoodLookups; factoryId
         </Table>
       )}
       {receiving ? <ReceiveWoodDrawer open onClose={() => setReceiving(false)} lookups={lookups} factoryId={factoryId} /> : null}
+      {weighing ? <WeighOutDrawer open onClose={() => setWeighing(null)} lookups={lookups} delivery={weighing} /> : null}
     </div>
   )
 }

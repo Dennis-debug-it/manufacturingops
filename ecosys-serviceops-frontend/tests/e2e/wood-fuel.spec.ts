@@ -123,6 +123,67 @@ test.describe('wood fuel', () => {
     await expect(page.getByText('above the 45% limit')).toBeVisible()
   })
 
+  test('a truck from the gate is weighed in, and its tare weighed out later', async ({ page }) => {
+    await openYard(page)
+    await page.route(`${API}/api/wood-fuel/gate-vehicles**`, async (route) => {
+      if (await preflight(route)) return
+      await route.fulfill(json([{ id: 'veh-1', registration: 'KCA123A', driverName: 'Peter Otieno', driverPhone: null, enteredAt: '2026-11-24T07:00:00Z', purpose: 'Delivery', description: null, deliveryNumber: null, pendingDeliveryId: null, awaitingTare: false, hasDelivery: false }]))
+    })
+    let weighedIn: Record<string, unknown> | null = null
+    await page.route(`${API}/api/wood-fuel/deliveries`, async (route) => {
+      if (await preflight(route)) return
+      weighedIn = route.request().postDataJSON() as Record<string, unknown>
+      await route.fulfill(json({ id: 'd-9', deliveryNumber: 'WF-000009', decision: 'Pending' }))
+    })
+    await page.goto('/wood-fuel')
+
+    await page.getByRole('button', { name: 'Receive wood' }).click()
+    await page.getByLabel('Truck at the gate').selectOption('veh-1')
+    await page.getByLabel('Gross weight (kg)').fill('12500')
+    await page.getByLabel(/weigh the tare later/).check()
+    await expect(page.getByLabel('Tare weight (kg)')).toBeDisabled()
+    await expect(page.getByText('weighed in. Finish the delivery once the truck is weighed out.')).toBeVisible()
+    await page.getByRole('button', { name: 'Save weigh-in' }).click()
+
+    await expect(page.getByText('WF-000009: Awaiting tare. Weigh the tare to finish it.')).toBeVisible()
+    expect(weighedIn).toMatchObject({ vehicleMovementId: 'veh-1', tareLater: true, grossKg: 12500, tareKg: null, vehicleRegistration: 'KCA123A', driverName: 'Peter Otieno', stackId: null })
+  })
+
+  test('a delivery waiting for its tare is weighed out from the Deliveries tab', async ({ page }) => {
+    await openYard(page)
+    const waiting = {
+      id: 'd-9', deliveryNumber: 'WF-000009', factoryId: FACTORY, factory: 'Chelal Tea Factory', receivedAt: '2026-11-24T07:30:00Z', supplierId: 'sup-1', supplier: 'Kiprop Woodlot', supplierPhone: '', supplierPaymentDetails: '',
+      speciesId: null, species: '', fuelForm: 'Logs', sourceArea: null, transportPermit: null, supplierNoteNumber: null, vehicleRegistration: 'KCA123A', driverName: 'Peter Otieno', measureBasis: 'Weighbridge',
+      grossKg: 12500, tareKg: null, stackedM3: null, loads: null, kgPerLoad: null, netKg: 0, averageMoisturePct: 30, moistureSamples: [30], decision: 'Pending', decisionReason: 'Gross weighed. Waiting for the tare.',
+      rejectedKg: 0, deductedKg: 0, payableKg: 0, pricePerTonne: 5000, pricePercent: 100, amountPayable: 0, stackId: null, stack: '', receivedBy: 'Yard Clerk', notes: null, vehicleMovementId: 'veh-1',
+    }
+    await page.route(`${API}/api/wood-fuel/deliveries?**`, async (route) => {
+      if (await preflight(route)) return
+      const wanted = new URL(route.request().url()).searchParams.get('decision')
+      await route.fulfill(json(wanted === 'Pending' || !wanted ? [waiting] : []))
+    })
+    let weighedOut: Record<string, unknown> | null = null
+    await page.route(`${API}/api/wood-fuel/deliveries/d-9/weigh-out`, async (route) => {
+      if (await preflight(route)) return
+      weighedOut = route.request().postDataJSON() as Record<string, unknown>
+      await route.fulfill(json({ ...waiting, decision: 'AcceptedWithDeduction', netKg: 7200 }))
+    })
+    await page.goto('/wood-fuel')
+    await page.getByRole('tab', { name: 'Deliveries' }).click()
+
+    await expect(page.getByText('Waiting for the tare')).toBeVisible()
+    await page.getByRole('button', { name: 'Weigh out' }).click()
+    await page.getByLabel('Tare weight (kg)').fill('5300')
+    await page.getByLabel('More moisture reading 1').fill('34')
+    await expect(page.getByText('Received:')).toContainText('7,200 kg')
+    // (The decision filter behind the drawer also lists this word, so look inside the drawer.)
+    await expect(page.locator('aside').getByText('Accepted with deduction')).toBeVisible()
+    await page.getByRole('button', { name: 'Finish delivery' }).click()
+
+    await expect(page.getByText('WF-000009: Accepted with deduction')).toBeVisible()
+    expect(weighedOut).toMatchObject({ tareKg: 5300, moistureSamples: [34], reject: false })
+  })
+
   test('with no signal a delivery is kept on the device', async ({ page, context }) => {
     await openYard(page)
     await page.goto('/wood-fuel')

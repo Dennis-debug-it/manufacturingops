@@ -8,7 +8,7 @@ export const RULE_LABEL: Record<string, string> = { DeductKg: 'Deduct kg for wet
 export const FORM_LABEL: Record<string, string> = { Logs: 'Logs', Splits: 'Splits', Slabs: 'Slabs', Offcuts: 'Offcuts', Briquettes: 'Briquettes', OtherBiomass: 'Other biomass (husks, sawdust…)' }
 export const SUPPLIER_TYPE_LABEL: Record<string, string> = { Farmer: 'Farmer', Merchant: 'Merchant', Cooperative: 'Cooperative', OwnWoodlot: 'Own woodlot' }
 export const REASON_LABEL: Record<string, string> = { CountVariance: 'Count difference', DryingLoss: 'Drying loss', Spillage: 'Spillage or waste' }
-export const DECISION_LABEL: Record<string, string> = { Accepted: 'Accepted', AcceptedWithDeduction: 'Accepted with deduction', Rejected: 'Rejected' }
+export const DECISION_LABEL: Record<string, string> = { Accepted: 'Accepted', AcceptedWithDeduction: 'Accepted with deduction', Rejected: 'Rejected', Pending: 'Awaiting tare' }
 export const STACK_STATUS_LABEL: Record<string, string> = { Receiving: 'Receiving', Seasoning: 'Seasoning', Ready: 'Ready', Depleted: 'Used up' }
 
 export interface Named { id: string; name: string }
@@ -119,6 +119,7 @@ export interface WoodDelivery {
   stack: string
   receivedBy: string
   notes: string | null
+  vehicleMovementId: string | null
 }
 
 export interface WoodIssue {
@@ -180,6 +181,8 @@ export interface YardSummary {
   costPerUnit: number | null
   targetKgPerUnit: number | null
   fuelUnit: string
+  /** Deliveries weighed in whose tare has not been weighed. */
+  awaitingTare: number
   stacks: StackRow[]
   suppliers: SupplierRow[]
   daily: DailyRow[]
@@ -208,6 +211,34 @@ export interface DeliveryInput {
   pricePerTonne: number | null
   stackId: string | null
   notes: string | null
+  vehicleMovementId: string | null
+  /** Gross weighed in; the tare is weighed out later and the gate holds the truck until then. */
+  tareLater: boolean
+}
+
+export interface WeighOutInput {
+  tareKg: number | null
+  moistureSamples: number[]
+  reject: boolean
+  rejectReason: string | null
+  acceptAboveMoistureLimit: boolean
+  pricePerTonne: number | null
+  stackId: string | null
+  notes: string | null
+}
+
+export interface GateVehicle {
+  id: string
+  registration: string
+  driverName: string | null
+  driverPhone: string | null
+  enteredAt: string
+  purpose: string
+  description: string | null
+  deliveryNumber: string | null
+  pendingDeliveryId: string | null
+  awaitingTare: boolean
+  hasDelivery: boolean
 }
 
 export interface IssueInput {
@@ -262,6 +293,11 @@ export function useDeliveries(params: { factoryId: string; supplierId?: string; 
   })
 }
 
+/** Trucks inside the factory gate that came with wood or may have. Needs the Visitor Management add-on's gate log; empty without it. */
+export function useGateVehicles(factoryId: string) {
+  return useQuery({ enabled: Boolean(factoryId), queryKey: [...KEY, 'gate-vehicles', factoryId], queryFn: () => api.get<GateVehicle[]>(`${BASE}/gate-vehicles`, { factoryId }), staleTime: 15_000 })
+}
+
 export function useIssues(factoryId: string) {
   return useQuery({ enabled: Boolean(factoryId), queryKey: [...KEY, 'issues', factoryId], queryFn: () => api.get<WoodIssue[]>(`${BASE}/issues`, { factoryId }) })
 }
@@ -307,6 +343,13 @@ export const useSaveProduction = () => useWoodMutation((payload: { factoryId: st
 export async function submitDelivery(input: DeliveryInput, label: string, queryClient: QueryClient) {
   const result = await performAction<WoodDelivery>({ kind: 'wood-delivery', label, workOrderId: null, method: 'POST', url: `${BASE}/deliveries`, body: input }, () => refreshAfterSync(queryClient))
   void queryClient.invalidateQueries({ queryKey: KEY })
+  return result
+}
+
+export async function submitWeighOut(deliveryId: string, input: WeighOutInput, label: string, queryClient: QueryClient) {
+  const result = await performAction<WoodDelivery>({ kind: 'wood-delivery', label, workOrderId: null, method: 'POST', url: `${BASE}/deliveries/${deliveryId}/weigh-out`, body: input }, () => refreshAfterSync(queryClient))
+  void queryClient.invalidateQueries({ queryKey: KEY })
+  void queryClient.invalidateQueries({ queryKey: ['visitors'] })
   return result
 }
 

@@ -370,6 +370,10 @@ export interface VehicleMovement {
   minutesInside: number
   /** Still inside although the visit it came with is over. */
   visitOver: boolean
+  /** The wood delivery recorded against this vehicle, if any (Wood Fuel add-on). */
+  woodDelivery?: string | null
+  /** The wood is weighed in but not weighed out; the gate holds the vehicle. */
+  woodPending?: boolean
 }
 
 export interface VehicleEntryPayload {

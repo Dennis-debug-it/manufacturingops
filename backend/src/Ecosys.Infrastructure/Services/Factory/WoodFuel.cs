@@ -150,6 +150,18 @@ public sealed record NewWoodDelivery(
     bool AcceptAboveMoistureLimit,
     decimal? PricePerTonne,
     Guid? StackId,
+    string? Notes,
+    bool TareLater = false);
+
+/// <summary>Finishes a delivery that was weighed in and is waiting for its tare.</summary>
+public sealed record CompleteWoodDelivery(
+    decimal? TareKg,
+    IReadOnlyList<decimal>? MoistureSamples,
+    bool Reject,
+    string? RejectReason,
+    bool AcceptAboveMoistureLimit,
+    decimal? PricePerTonne,
+    Guid? StackId,
     string? Notes);
 
 public sealed record NewWoodIssue(Guid FactoryId, Guid AssetId, Guid? StackId, decimal? Kg, decimal? Loads, decimal? KgPerLoad, string? Shift, string? Notes);
@@ -184,6 +196,7 @@ public sealed record WoodYardSummary(
     decimal? CostPerUnit,
     decimal? TargetKgPerUnit,
     string FuelUnit,
+    int AwaitingTare,
     IReadOnlyList<WoodStackRow> Stacks,
     IReadOnlyList<WoodSupplierRow> Suppliers,
     IReadOnlyList<WoodDailyRow> Daily);
@@ -201,6 +214,9 @@ public interface IWoodFuelService
 
     /// <summary>Records a delivery: finds the weight, averages the moisture, decides and prices it, and puts accepted wood into the ledger.</summary>
     Task<WoodDelivery> ReceiveAsync(Guid tenantId, NewWoodDelivery delivery, WoodActor actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Weighs out a delivery that came in on the weighbridge: the tare, more moisture readings, the decision, and the ledger.</summary>
+    Task<WoodDelivery> CompleteAsync(Guid tenantId, Guid deliveryId, CompleteWoodDelivery completion, WoodActor actor, CancellationToken cancellationToken = default);
 
     /// <summary>Records wood fed to a boiler or dryer: takes it from the ledger and adds it to the asset's wood meter.</summary>
     Task<WoodIssue> IssueAsync(Guid tenantId, NewWoodIssue issue, WoodActor actor, CancellationToken cancellationToken = default);
@@ -273,7 +289,21 @@ internal sealed class WoodFuelService(
         var form = d.FuelForm is null ? FuelForms.Logs : FuelForms.Find(d.FuelForm)
             ?? throw new BusinessRuleException($"Form must be one of: {string.Join(", ", FuelForms.All)}.");
 
-        var net = WoodFuelRules.NetKg(basis, d.GrossKg, d.TareKg, d.StackedM3, d.Loads, d.KgPerLoad ?? settings.DefaultKgPerLoad, species?.KgPerStackedM3);
+        VehicleMovement? movement = null;
+        if (d.VehicleMovementId is { } movementId)
+        {
+            movement = await dbContext.VehicleMovements.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == movementId, cancellationToken)
+                ?? throw new BusinessRuleException("That vehicle was not found in the gate log.");
+            if (movement.FactoryId != d.FactoryId) throw new BusinessRuleException($"{movement.Registration} came in at another factory's gate.");
+        }
+
+        if (d.TareLater)
+        {
+            if (basis != WoodMeasureBasis.Weighbridge) throw new BusinessRuleException("Only a delivery weighed on the weighbridge can wait for its tare.");
+            if (d.GrossKg is not > 0) throw new BusinessRuleException("Enter the gross weight from the weighbridge.");
+        }
+
+        var net = d.TareLater ? 0m : WoodFuelRules.NetKg(basis, d.GrossKg, d.TareKg, d.StackedM3, d.Loads, d.KgPerLoad ?? settings.DefaultKgPerLoad, species?.KgPerStackedM3);
 
         var samples = (d.MoistureSamples ?? []).ToList();
         if (samples.Any(x => x is < 0 or > 100)) throw new BusinessRuleException("Each moisture reading must be between 0 and 100 percent.");
@@ -283,10 +313,13 @@ internal sealed class WoodFuelService(
         var price = d.PricePerTonne ?? (await FindPriceAsync(tenantId, d.SupplierId, d.SpeciesId, form, receivedAt, cancellationToken))?.PricePerTonne ?? 0m;
         if (price < 0) throw new BusinessRuleException("The price cannot be negative.");
         if (d.AcceptAboveMoistureLimit && !actor.CanManage) throw new ForbiddenException("Only a wood fuel manager can accept wood wetter than the limit.");
-        var assessment = WoodFuelRules.Assess(settings, net, moisture, price, d.Reject, d.RejectReason, d.AcceptAboveMoistureLimit);
+        var assessment = d.TareLater
+            ? new WoodAssessment(WoodDecisions.Pending, 0, 0, 0, 100m, 0, "Gross weighed. Waiting for the tare.")
+            : WoodFuelRules.Assess(settings, net, moisture, price, d.Reject, d.RejectReason, d.AcceptAboveMoistureLimit);
+        var settled = assessment.Decision is not (WoodDecisions.Rejected or WoodDecisions.Pending);
 
         WoodStack? stack = null;
-        if (d.StackId is { } stackId && assessment.Decision != WoodDecisions.Rejected)
+        if (d.StackId is { } stackId && settled)
         {
             stack = await dbContext.WoodStacks.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.FactoryId == d.FactoryId && x.Id == stackId, cancellationToken)
                 ?? throw new BusinessRuleException("That stack is not in this factory's yard.");
@@ -304,13 +337,13 @@ internal sealed class WoodFuelService(
             SourceArea = Clean(d.SourceArea, 200) ?? supplier?.SourceArea,
             TransportPermit = Clean(d.TransportPermit, 60) ?? supplier?.PermitNumber,
             SupplierNoteNumber = Clean(d.SupplierNoteNumber, 60),
-            VehicleRegistration = VisitorService.NormaliseRegistration(d.VehicleRegistration),
-            DriverName = Clean(d.DriverName, 200),
-            VehicleMovementId = d.VehicleMovementId,
+            VehicleRegistration = VisitorService.NormaliseRegistration(d.VehicleRegistration) ?? movement?.Registration,
+            DriverName = Clean(d.DriverName, 200) ?? movement?.DriverName,
+            VehicleMovementId = movement?.Id,
             ReceivedAt = receivedAt,
             MeasureBasis = basis,
             GrossKg = basis == WoodMeasureBasis.Weighbridge ? d.GrossKg : null,
-            TareKg = basis == WoodMeasureBasis.Weighbridge ? d.TareKg : null,
+            TareKg = basis == WoodMeasureBasis.Weighbridge && !d.TareLater ? d.TareKg : null,
             StackedM3 = basis == WoodMeasureBasis.StackedVolume ? d.StackedM3 : null,
             Loads = basis == WoodMeasureBasis.LoadCount ? d.Loads : null,
             KgPerLoad = basis == WoodMeasureBasis.LoadCount ? d.KgPerLoad ?? settings.DefaultKgPerLoad : null,
@@ -333,24 +366,77 @@ internal sealed class WoodFuelService(
             delivery.MoistureSamples.Add(new WoodMoistureSample { TenantId = tenantId, ValuePct = value, MeasuredAt = receivedAt });
         dbContext.WoodDeliveries.Add(delivery);
 
-        if (assessment.Decision != WoodDecisions.Rejected)
-        {
-            dbContext.WoodStockMovements.Add(new WoodStockMovement
-            {
-                TenantId = tenantId, FactoryId = d.FactoryId, StackId = stack?.Id, Kind = WoodMovementKinds.Receipt,
-                KgChange = net, OccurredAt = receivedAt, DeliveryId = delivery.Id, Reason = delivery.DeliveryNumber, ByName = actor.Name,
-            });
-            if (stack is not null)
-            {
-                // Wood added to a stack restarts its seasoning clock.
-                var readyFrom = receivedAt.AddDays(settings.SeasoningDays);
-                if (stack.ReadyFrom is null || stack.ReadyFrom < readyFrom) stack.ReadyFrom = readyFrom;
-            }
-        }
+        if (settled) PutInLedger(delivery, stack, settings, receivedAt, actor);
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        await AlertAfterDeliveryAsync(tenantId, delivery, supplier?.Name, settings, cancellationToken);
+        if (assessment.Decision != WoodDecisions.Pending) await AlertAfterDeliveryAsync(tenantId, delivery, supplier?.Name, settings, cancellationToken);
         return delivery;
+    }
+
+    public async Task<WoodDelivery> CompleteAsync(Guid tenantId, Guid deliveryId, CompleteWoodDelivery c, WoodActor actor, CancellationToken cancellationToken = default)
+    {
+        var delivery = await dbContext.WoodDeliveries.Include(x => x.MoistureSamples).Include(x => x.Supplier)
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == deliveryId, cancellationToken)
+            ?? throw new NotFoundException("That delivery was not found.");
+        if (delivery.Decision != WoodDecisions.Pending) throw new BusinessRuleException($"{delivery.DeliveryNumber} has already been weighed out.");
+        var settings = await SettingsAsync(tenantId, delivery.FactoryId, cancellationToken);
+
+        // A truck turned away can be closed out with no tare: nothing is received, and the gate lets it go.
+        var turnedAway = c.Reject && c.TareKg is null;
+        var net = turnedAway ? 0m : WoodFuelRules.NetKg(WoodMeasureBasis.Weighbridge, delivery.GrossKg, c.TareKg, null, null, null, null);
+
+        var extra = (c.MoistureSamples ?? []).ToList();
+        if (extra.Any(x => x is < 0 or > 100)) throw new BusinessRuleException("Each moisture reading must be between 0 and 100 percent.");
+        var at = OccurredAt.UtcNow;
+        var all = delivery.MoistureSamples.Select(x => x.ValuePct).Concat(extra).ToList();
+        // Added through their own set: the delivery is already tracked, and a new child with a key already set would be taken for an update.
+        foreach (var value in extra) dbContext.WoodMoistureSamples.Add(new WoodMoistureSample { TenantId = tenantId, DeliveryId = delivery.Id, ValuePct = value, MeasuredAt = at });
+        decimal? moisture = all.Count == 0 ? null : Math.Round(all.Average(), 2);
+
+        var price = c.PricePerTonne ?? (await FindPriceAsync(tenantId, delivery.SupplierId, delivery.SpeciesId, delivery.FuelForm, at, cancellationToken))?.PricePerTonne ?? 0m;
+        if (price < 0) throw new BusinessRuleException("The price cannot be negative.");
+        if (c.AcceptAboveMoistureLimit && !actor.CanManage) throw new ForbiddenException("Only a wood fuel manager can accept wood wetter than the limit.");
+        var assessment = WoodFuelRules.Assess(settings, net, moisture, price, c.Reject, c.RejectReason, c.AcceptAboveMoistureLimit);
+
+        WoodStack? stack = null;
+        if (c.StackId is { } stackId && assessment.Decision != WoodDecisions.Rejected)
+        {
+            stack = await dbContext.WoodStacks.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.FactoryId == delivery.FactoryId && x.Id == stackId, cancellationToken)
+                ?? throw new BusinessRuleException("That stack is not in this factory's yard.");
+            if (stack.Status == WoodStackStatuses.Depleted || !stack.IsActive) throw new BusinessRuleException($"Stack {stack.Code} is closed. Choose another or open it again.");
+        }
+
+        delivery.TareKg = turnedAway ? null : c.TareKg;
+        delivery.NetKg = net;
+        delivery.AverageMoisturePct = moisture;
+        delivery.Decision = assessment.Decision;
+        delivery.DecisionReason = assessment.Reason;
+        delivery.RejectedKg = assessment.RejectedKg;
+        delivery.DeductedKg = assessment.DeductedKg;
+        delivery.PayableKg = assessment.PayableKg;
+        delivery.PricePerTonne = price;
+        delivery.PricePercent = assessment.PricePercent;
+        delivery.AmountPayable = assessment.Amount;
+        delivery.StackId = stack?.Id;
+        delivery.Notes = Clean(c.Notes, 1000) ?? delivery.Notes;
+        if (assessment.Decision != WoodDecisions.Rejected) PutInLedger(delivery, stack, settings, at, actor);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await AlertAfterDeliveryAsync(tenantId, delivery, delivery.Supplier?.Name, settings, cancellationToken);
+        return delivery;
+    }
+
+    /// <summary>Puts a decided delivery's wood into the ledger, and restarts its stack's seasoning clock.</summary>
+    private void PutInLedger(WoodDelivery delivery, WoodStack? stack, WoodFuelSettings settings, DateTime at, WoodActor actor)
+    {
+        dbContext.WoodStockMovements.Add(new WoodStockMovement
+        {
+            TenantId = delivery.TenantId, FactoryId = delivery.FactoryId, StackId = stack?.Id, Kind = WoodMovementKinds.Receipt,
+            KgChange = delivery.NetKg, OccurredAt = at, DeliveryId = delivery.Id, Reason = delivery.DeliveryNumber, ByName = actor.Name,
+        });
+        if (stack is null) return;
+        var readyFrom = at.AddDays(settings.SeasoningDays);
+        if (stack.ReadyFrom is null || stack.ReadyFrom < readyFrom) stack.ReadyFrom = readyFrom;
     }
 
     public async Task<WoodIssue> IssueAsync(Guid tenantId, NewWoodIssue i, WoodActor actor, CancellationToken cancellationToken = default)
@@ -663,7 +749,9 @@ internal sealed class WoodFuelService(
             cover is { } c && c < settings.LowCoverDays, settings.LowCoverDays,
             Math.Round(opening, 1), Math.Round(received, 1), Math.Round(issued, 1), Math.Round(adjustment, 1), Math.Round(closing, 1),
             Math.Round(deliveries.Sum(x => x.RejectedKg), 1), Math.Round(deliveries.Sum(x => x.DeductedKg), 1), amount, avgMoisture,
-            madeTea, kgPerUnit, costPerUnit, settings.TargetKgPerUnit, "kg", stacks, suppliers, daily);
+            madeTea, kgPerUnit, costPerUnit, settings.TargetKgPerUnit, "kg",
+            await dbContext.WoodDeliveries.CountAsync(x => x.TenantId == tenantId && x.FactoryId == factoryId && x.Decision == WoodDecisions.Pending, cancellationToken),
+            stacks, suppliers, daily);
     }
 
     private async Task RequireFactoryAsync(Guid tenantId, Guid factoryId, CancellationToken cancellationToken)

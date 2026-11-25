@@ -8,8 +8,8 @@ import { numberOrNull, textOrNull, todayInput } from '../../shared/components/fo
 import { formatCurrency } from '../../shared/utils/format'
 import {
   DECISION_LABEL, FORM_LABEL, MEASURE_LABEL, REASON_LABEL, STACK_STATUS_LABEL, SUPPLIER_TYPE_LABEL,
-  submitDelivery, submitIssue, useCountStack, useSavePrice, useSaveStack, useSaveSupplier,
-  type WoodLookups, type WoodPrice, type WoodSettings, type WoodSupplier,
+  submitDelivery, submitIssue, submitWeighOut, useCountStack, useGateVehicles, useSavePrice, useSaveStack, useSaveSupplier,
+  type WoodDelivery, type WoodLookups, type WoodPrice, type WoodSettings, type WoodSupplier,
 } from './api'
 import { assess, averageMoisture, netKg, round } from './logic'
 
@@ -48,6 +48,9 @@ export function ReceiveWoodDrawer({ open, onClose, lookups, factoryId }: { open:
   const [price, setPrice] = useState('')
   const [stackId, setStackId] = useState('')
   const [vehicle, setVehicle] = useState('')
+  const [gateVehicleId, setGateVehicleId] = useState('')
+  const [tareLater, setTareLater] = useState(false)
+  const gate = useGateVehicles(factoryId)
   const [driver, setDriver] = useState('')
   const [note, setNote] = useState('')
   const [permit, setPermit] = useState('')
@@ -56,26 +59,30 @@ export function ReceiveWoodDrawer({ open, onClose, lookups, factoryId }: { open:
   const [saving, setSaving] = useState(false)
 
   const species = lookups.species.find((x) => x.id === speciesId)
-  const measured = netKg({ basis, grossKg: num(gross), tareKg: num(tare), stackedM3: num(m3), loads: num(loads), kgPerLoad: num(perLoad), densityKgPerM3: species?.kgPerStackedM3 ?? null })
+  const waiting = tareLater && basis === 'Weighbridge'
+  const measured = waiting
+    ? { kg: null, problem: num(gross) === null || num(gross)! <= 0 ? 'Enter the gross weight.' : null }
+    : netKg({ basis, grossKg: num(gross), tareKg: num(tare), stackedM3: num(m3), loads: num(loads), kgPerLoad: num(perLoad), densityKgPerM3: species?.kgPerStackedM3 ?? null })
   const moisture = averageMoisture(samples.map(num))
   const priceValue = num(price)
-  const result = measured.kg === null ? null : assess(settings, measured.kg, moisture, priceValue ?? 0, reject, rejectReason, acceptWet)
+  const result = waiting || measured.kg === null ? null : assess(settings, measured.kg, moisture, priceValue ?? 0, reject, rejectReason, acceptWet)
   const overLimit = moisture !== null && moisture > settings.rejectMoisturePct
 
   const save = async () => {
-    if (measured.kg === null) return toast.error(measured.problem ?? 'Enter the weight.')
+    if (measured.kg === null && !waiting) return toast.error(measured.problem ?? 'Enter the weight.')
+    if (waiting && measured.problem) return toast.error(measured.problem)
     setSaving(true)
     try {
       const supplier = lookups.suppliers.find((x) => x.id === supplierId)?.name ?? 'Unknown supplier'
       const outcome = await submitDelivery({
         factoryId, supplierId: supplierId || null, speciesId: speciesId || null, fuelForm: form, sourceArea: textOrNull(source), transportPermit: textOrNull(permit),
         supplierNoteNumber: textOrNull(note), vehicleRegistration: textOrNull(vehicle), driverName: textOrNull(driver), measureBasis: basis,
-        grossKg: basis === 'Weighbridge' ? num(gross) : null, tareKg: basis === 'Weighbridge' ? num(tare) : null, stackedM3: basis === 'StackedVolume' ? num(m3) : null,
+        grossKg: basis === 'Weighbridge' ? num(gross) : null, tareKg: basis === 'Weighbridge' && !waiting ? num(tare) : null, stackedM3: basis === 'StackedVolume' ? num(m3) : null,
         loads: basis === 'LoadCount' ? num(loads) : null, kgPerLoad: basis === 'LoadCount' ? num(perLoad) : null,
         moistureSamples: samples.map(num).filter((x): x is number => x !== null), reject, rejectReason: textOrNull(rejectReason), acceptAboveMoistureLimit: acceptWet && lookups.canManage,
-        pricePerTonne: priceValue, stackId: stackId || null, notes: textOrNull(notes),
-      }, `Wood from ${supplier}, ${kg(measured.kg)}`, queryClient)
-      toast.success(outcome.queued ? 'Saved on this device. It is sent when the signal is back.' : outcome.data ? `${outcome.data.deliveryNumber}: ${DECISION_LABEL[outcome.data.decision] ?? outcome.data.decision}` : 'Delivery saved')
+        pricePerTonne: priceValue, stackId: waiting ? null : stackId || null, notes: textOrNull(notes), vehicleMovementId: gateVehicleId || null, tareLater: waiting,
+      }, `Wood from ${supplier}, ${waiting ? `gross ${kg(num(gross)!)}` : kg(measured.kg!)}`, queryClient)
+      toast.success(outcome.queued ? 'Saved on this device. It is sent when the signal is back.' : outcome.data ? `${outcome.data.deliveryNumber}: ${DECISION_LABEL[outcome.data.decision] ?? outcome.data.decision}${waiting ? '. Weigh the tare to finish it.' : ''}` : 'Delivery saved')
       onClose()
     } catch {
       // shown by the API client
@@ -89,9 +96,21 @@ export function ReceiveWoodDrawer({ open, onClose, lookups, factoryId }: { open:
       open={open}
       title="Receive wood"
       onClose={onClose}
-      footer={<div className="flex justify-end gap-2"><button type="button" className={secondaryButton} onClick={onClose}>Cancel</button><button type="button" className={primaryButton} disabled={saving || measured.kg === null} onClick={() => void save()}>{saving ? 'Saving…' : 'Save delivery'}</button></div>}
+      footer={<div className="flex justify-end gap-2"><button type="button" className={secondaryButton} onClick={onClose}>Cancel</button><button type="button" className={primaryButton} disabled={saving || (measured.kg === null && !waiting)} onClick={() => void save()}>{saving ? 'Saving…' : waiting ? 'Save weigh-in' : 'Save delivery'}</button></div>}
     >
       <div className="space-y-5">
+        {(gate.data ?? []).length > 0 ? (
+          <Field label="Truck at the gate" hint="Picking the truck links this delivery to the gate log. The gate holds it until the tare is weighed.">
+            <select className={inputClass} value={gateVehicleId} onChange={(e) => {
+              const truck = (gate.data ?? []).find((x) => x.id === e.target.value)
+              setGateVehicleId(e.target.value)
+              if (truck) { setVehicle(truck.registration); setDriver(truck.driverName ?? '') }
+            }}>
+              <option value="">Not from the gate log</option>
+              {(gate.data ?? []).filter((x) => !x.awaitingTare).map((x) => <option key={x.id} value={x.id}>{x.registration}{x.driverName ? ` · ${x.driverName}` : ''}{x.hasDelivery ? ' (already has a delivery)' : ''}</option>)}
+            </select>
+          </Field>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Supplier">
             <select className={inputClass} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
@@ -128,7 +147,8 @@ export function ReceiveWoodDrawer({ open, onClose, lookups, factoryId }: { open:
           {basis === 'Weighbridge' ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Gross weight (kg)" required><input className={inputClass} inputMode="decimal" value={gross} onChange={(e) => setGross(e.target.value)} /></Field>
-              <Field label="Tare weight (kg)" required><input className={inputClass} inputMode="decimal" value={tare} onChange={(e) => setTare(e.target.value)} /></Field>
+              <Field label="Tare weight (kg)" required={!waiting}><input className={inputClass} inputMode="decimal" disabled={waiting} value={waiting ? '' : tare} onChange={(e) => setTare(e.target.value)} /></Field>
+              <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2"><input type="checkbox" checked={tareLater} onChange={(e) => setTareLater(e.target.checked)} />The truck is still on the weighbridge: weigh the tare later</label>
             </div>
           ) : null}
           {basis === 'StackedVolume' ? (
@@ -142,7 +162,7 @@ export function ReceiveWoodDrawer({ open, onClose, lookups, factoryId }: { open:
               <Field label="Weight of one load (kg)" required><input className={inputClass} inputMode="decimal" value={perLoad} onChange={(e) => setPerLoad(e.target.value)} /></Field>
             </div>
           ) : null}
-          <p className="text-sm text-slate-600">{measured.kg === null ? measured.problem : <>Received: <span className="font-semibold text-slate-900">{kg(measured.kg)}</span></>}</p>
+          <p className="text-sm text-slate-600">{waiting ? (measured.problem ?? <>Gross <span className="font-semibold text-slate-900">{kg(num(gross)!)}</span> weighed in. Finish the delivery once the truck is weighed out.</>) : measured.kg === null ? measured.problem : <>Received: <span className="font-semibold text-slate-900">{kg(measured.kg)}</span></>}</p>
         </fieldset>
 
         <fieldset className="space-y-3 rounded-lg border border-slate-200 p-3">
@@ -167,12 +187,12 @@ export function ReceiveWoodDrawer({ open, onClose, lookups, factoryId }: { open:
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reject} onChange={(e) => setReject(e.target.checked)} />Reject this load</label>
+          {!waiting ? <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reject} onChange={(e) => setReject(e.target.checked)} />Reject this load</label> : null}
           {overLimit && lookups.canManage ? <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={acceptWet} onChange={(e) => setAcceptWet(e.target.checked)} />Accept it although it is over the limit</label> : null}
         </div>
-        {reject ? <Field label="Why was it rejected?"><input className={inputClass} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} /></Field> : null}
+        {reject && !waiting ? <Field label="Why was it rejected?"><input className={inputClass} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} /></Field> : null}
 
-        {!reject ? (
+        {!reject && !waiting ? (
           <Field label="Into stack" hint="Leave blank if the wood has not been stacked yet.">
             <select className={inputClass} value={stackId} onChange={(e) => setStackId(e.target.value)}>
               <option value="">No stack yet</option>
@@ -478,6 +498,95 @@ export function PriceDrawer({ open, onClose, lookups, price }: { open: boolean; 
         <Field label="Until" hint="Leave blank if it has no end."><input type="date" className={inputClass} value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         <Field label="Notes" className="sm:col-span-2"><textarea className={textareaClass} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />In use</label>
+      </div>
+    </FormDrawer>
+  )
+}
+
+/* ── Weigh out a delivery ────────────────────────────────────────────────── */
+
+export function WeighOutDrawer({ open, onClose, lookups, delivery }: { open: boolean; onClose: () => void; lookups: WoodLookups; delivery: WoodDelivery }) {
+  const queryClient = useQueryClient()
+  const settings = lookups.settings ?? { ...DEFAULT_SETTINGS }
+  const [tare, setTare] = useState('')
+  const [samples, setSamples] = useState(['', ''])
+  const [reject, setReject] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [acceptWet, setAcceptWet] = useState(false)
+  const [price, setPrice] = useState('')
+  const [stackId, setStackId] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const turnedAway = reject && num(tare) === null
+  const measured = turnedAway ? { kg: 0, problem: null } : netKg({ basis: 'Weighbridge', grossKg: delivery.grossKg, tareKg: num(tare), stackedM3: null, loads: null, kgPerLoad: null, densityKgPerM3: null })
+  const moisture = averageMoisture([...delivery.moistureSamples, ...samples.map(num)])
+  const result = measured.kg === null ? null : assess(settings, measured.kg, moisture, num(price) ?? delivery.pricePerTonne, reject, rejectReason, acceptWet)
+  const overLimit = moisture !== null && moisture > settings.rejectMoisturePct
+
+  const save = async () => {
+    if (measured.kg === null) return toast.error(measured.problem ?? 'Enter the tare weight.')
+    setSaving(true)
+    try {
+      const outcome = await submitWeighOut(delivery.id, {
+        tareKg: num(tare), moistureSamples: samples.map(num).filter((x): x is number => x !== null), reject, rejectReason: textOrNull(rejectReason),
+        acceptAboveMoistureLimit: acceptWet && lookups.canManage, pricePerTonne: num(price), stackId: reject ? null : stackId || null, notes: textOrNull(notes),
+      }, `Weigh out ${delivery.deliveryNumber}`, queryClient)
+      toast.success(outcome.queued ? 'Saved on this device. It is sent when the signal is back.' : `${delivery.deliveryNumber}: ${DECISION_LABEL[outcome.data?.decision ?? ''] ?? 'done'}`)
+      onClose()
+    } catch {
+      // shown by the API client
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <FormDrawer
+      open={open}
+      title={`Weigh out ${delivery.deliveryNumber}`}
+      onClose={onClose}
+      footer={<div className="flex justify-end gap-2"><button type="button" className={secondaryButton} onClick={onClose}>Cancel</button><button type="button" className={primaryButton} disabled={saving || measured.kg === null} onClick={() => void save()}>{saving ? 'Saving…' : 'Finish delivery'}</button></div>}
+    >
+      <div className="space-y-5">
+        <p className="text-sm text-slate-700">{delivery.supplier || 'Unlisted supplier'} · {delivery.vehicleRegistration || 'no vehicle'} · gross <span className="font-semibold">{kg(delivery.grossKg ?? 0)}</span> weighed in.{delivery.moistureSamples.length > 0 ? ` Readings so far: ${delivery.moistureSamples.map((x) => `${x}%`).join(', ')}.` : ''}</p>
+        <Field label="Tare weight (kg)" required={!reject} hint={reject ? 'A truck turned away can be closed with no tare.' : undefined}>
+          <input className={inputClass} inputMode="decimal" value={tare} onChange={(e) => setTare(e.target.value)} />
+        </Field>
+        <fieldset className="space-y-3 rounded-lg border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-semibold text-slate-800">More moisture readings (%)</legend>
+          <div className="grid grid-cols-2 gap-3">
+            {samples.map((value, index) => (
+              <input key={index} aria-label={`More moisture reading ${index + 1}`} className={inputClass} inputMode="decimal" placeholder={`Reading ${index + 1}`} value={value}
+                onChange={(e) => setSamples((current) => current.map((x, i) => (i === index ? e.target.value : x)))} />
+            ))}
+          </div>
+          <p className="text-sm text-slate-600">{moisture === null ? 'No readings yet.' : <>Average <span className="font-semibold text-slate-900">{moisture}%</span> (base {settings.baseMoisturePct}%, reject above {settings.rejectMoisturePct}%)</>}</p>
+        </fieldset>
+        {measured.kg !== null && !turnedAway ? <p className="text-sm text-slate-600">Received: <span className="font-semibold text-slate-900">{kg(measured.kg)}</span></p> : null}
+        {result ? (
+          <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm" aria-live="polite">
+            <div className="flex items-center gap-2">
+              <Badge tone={result.decision === 'Rejected' ? 'danger' : result.decision === 'Accepted' ? 'success' : 'warning'}>{DECISION_LABEL[result.decision]}</Badge>
+              {result.reason ? <span className="text-slate-700">{result.reason}</span> : null}
+            </div>
+            {result.decision !== 'Rejected' ? <div>Payable {kg(result.payableKg)}</div> : null}
+          </div>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={reject} onChange={(e) => setReject(e.target.checked)} />Reject this load</label>
+          {overLimit && lookups.canManage ? <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={acceptWet} onChange={(e) => setAcceptWet(e.target.checked)} />Accept it although it is over the limit</label> : null}
+        </div>
+        {reject ? <Field label="Why was it rejected?"><input className={inputClass} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} /></Field> : (
+          <Field label="Into stack">
+            <select className={inputClass} value={stackId} onChange={(e) => setStackId(e.target.value)}>
+              <option value="">No stack yet</option>
+              {lookups.stacks.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </Field>
+        )}
+        {lookups.canManage ? <Field label="Price per tonne" hint="Leave blank to use the agreed price."><input className={inputClass} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></Field> : null}
+        <Field label="Notes"><textarea className={textareaClass} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
       </div>
     </FormDrawer>
   )

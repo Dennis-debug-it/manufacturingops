@@ -74,6 +74,7 @@ export function VehiclesTab({ factoryId }: { factoryId: string }) {
                     <div className="flex items-center gap-2"><Car className="h-4 w-4 text-slate-400" /><span className="font-mono font-semibold text-slate-900">{row.registration}</span><Badge size="sm">{row.purpose}</Badge></div>
                     <div className="text-xs text-slate-500">{[row.description, row.visitNumber, factoryId ? null : row.factoryName].filter(Boolean).join(' · ')}</div>
                     {row.visitOver ? <div className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700"><AlertTriangle className="h-3 w-3" />Visit is over but the vehicle is still inside</div> : null}
+                    {row.woodPending && !row.exitedAt ? <div className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700"><AlertTriangle className="h-3 w-3" />Wood delivery {row.woodDelivery} is not weighed out yet. Hold the vehicle until the wood clerk has weighed its tare.</div> : row.woodDelivery ? <div className="mt-1 text-xs text-slate-500">Wood delivery {row.woodDelivery}</div> : null}
                   </td>
                   <td className="px-3 py-2 text-slate-600">{row.driverName ?? '—'}<div className="text-xs text-slate-500">{row.driverPhone ?? ''}</div></td>
                   <td className="px-3 py-2 text-slate-600">{insideOnly ? formatTime(row.enteredAt) : formatDateTime(row.enteredAt)}<div className="text-xs text-slate-500">{row.enteredByName}</div></td>

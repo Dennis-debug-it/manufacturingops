@@ -348,8 +348,47 @@ public sealed class WoodFuelController(
         var delivery = await woodFuel.ReceiveAsync(TenantId, new NewWoodDelivery(request.FactoryId, request.SupplierId, request.SpeciesId, request.FuelForm, request.SourceArea,
             request.TransportPermit, request.SupplierNoteNumber, request.VehicleRegistration, request.DriverName, request.VehicleMovementId, request.MeasureBasis,
             request.GrossKg, request.TareKg, request.StackedM3, request.Loads, request.KgPerLoad, request.MoistureSamples, request.Reject, request.RejectReason,
-            request.AcceptAboveMoistureLimit, request.PricePerTonne, request.StackId, request.Notes), Actor, cancellationToken);
+            request.AcceptAboveMoistureLimit, request.PricePerTonne, request.StackId, request.Notes, request.TareLater), Actor, cancellationToken);
         return Ok(ToDto(await DeliveryQuery().SingleAsync(x => x.Id == delivery.Id, cancellationToken)));
+    }
+
+    /// <summary>
+    /// Weigh out a delivery that came in on the weighbridge: the tare, any more moisture readings, the decision. A truck
+    /// turned away can be closed out with no tare. Until then the gate holds the truck.
+    /// </summary>
+    [HttpPost("deliveries/{id:guid}/weigh-out")]
+    public async Task<ActionResult<WoodDeliveryDto>> WeighOut(Guid id, [FromBody] WeighOutRequest request, CancellationToken cancellationToken)
+    {
+        EnsureReceive();
+        var factoryId = await dbContext.WoodDeliveries.AsNoTracking().Where(x => x.TenantId == TenantId && x.Id == id).Select(x => (Guid?)x.FactoryId).SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("That delivery was not found.");
+        await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, factoryId, cancellationToken);
+        await woodFuel.CompleteAsync(TenantId, id, new CompleteWoodDelivery(request.TareKg, request.MoistureSamples, request.Reject, request.RejectReason, request.AcceptAboveMoistureLimit,
+            request.PricePerTonne, request.StackId, request.Notes), Actor, cancellationToken);
+        return Ok(ToDto(await DeliveryQuery().SingleAsync(x => x.Id == id, cancellationToken)));
+    }
+
+    /// <summary>Trucks inside this factory's gate that came with wood or may have, so a delivery can be started from the gate's entry.</summary>
+    [HttpGet("gate-vehicles")]
+    public async Task<ActionResult<IReadOnlyList<WoodGateVehicle>>> GateVehicles([FromQuery] Guid factoryId, CancellationToken cancellationToken)
+    {
+        EnsureReceive();
+        await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, factoryId, cancellationToken);
+        var purposes = new[] { VehiclePurposes.Delivery, VehiclePurposes.Collection };
+        var inside = await dbContext.VehicleMovements.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.FactoryId == factoryId && x.ExitedAt == null && purposes.Contains(x.Purpose))
+            .OrderByDescending(x => x.EnteredAt).Take(50).ToListAsync(cancellationToken);
+        var ids = inside.Select(x => x.Id).ToList();
+        var linked = await dbContext.WoodDeliveries.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.VehicleMovementId != null && ids.Contains(x.VehicleMovementId.Value))
+            .Select(x => new { Vehicle = x.VehicleMovementId!.Value, x.Id, x.DeliveryNumber, x.Decision, x.CreatedAt }).ToListAsync(cancellationToken);
+        return Ok(inside.Select(v =>
+        {
+            var mine = linked.Where(x => x.Vehicle == v.Id).OrderByDescending(x => x.CreatedAt).ToList();
+            var pending = mine.FirstOrDefault(x => x.Decision == WoodDecisions.Pending);
+            return new WoodGateVehicle(v.Id, v.Registration, v.DriverName, v.DriverPhone, v.EnteredAt, v.Purpose, v.Description,
+                (pending ?? mine.FirstOrDefault())?.DeliveryNumber, pending?.Id, pending is not null, mine.Count > 0);
+        }).ToList());
     }
 
     /// <summary>The deliveries of a period as a CSV for finance: what each load weighed, its moisture and what is payable.</summary>
@@ -519,7 +558,7 @@ public sealed class WoodFuelController(
         CanManage ? d.Supplier?.Phone ?? string.Empty : string.Empty, CanManage ? d.Supplier?.PaymentDetails ?? string.Empty : string.Empty,
         d.SpeciesId, d.Species?.Name ?? string.Empty, d.FuelForm, d.SourceArea, d.TransportPermit, d.SupplierNoteNumber, d.VehicleRegistration ?? string.Empty, d.DriverName,
         d.MeasureBasis, d.GrossKg, d.TareKg, d.StackedM3, d.Loads, d.KgPerLoad, d.NetKg, d.AverageMoisturePct, d.MoistureSamples.OrderBy(x => x.MeasuredAt).Select(x => x.ValuePct).ToList(),
-        d.Decision, d.DecisionReason, d.RejectedKg, d.DeductedKg, d.PayableKg, d.PricePerTonne, d.PricePercent, d.AmountPayable, d.StackId, d.Stack?.Code ?? string.Empty, d.ReceivedByName, d.Notes);
+        d.Decision, d.DecisionReason, d.RejectedKg, d.DeductedKg, d.PayableKg, d.PricePerTonne, d.PricePercent, d.AmountPayable, d.StackId, d.Stack?.Code ?? string.Empty, d.ReceivedByName, d.Notes, d.VehicleMovementId);
 }
 
 public sealed record WoodNamed(Guid Id, string Name);
@@ -552,14 +591,20 @@ public sealed record ReceiveDeliveryRequest(
     [StringLength(60)] string? SupplierNoteNumber, [StringLength(30)] string? VehicleRegistration, [StringLength(200)] string? DriverName, Guid? VehicleMovementId,
     string? MeasureBasis, decimal? GrossKg, decimal? TareKg, decimal? StackedM3, decimal? Loads, decimal? KgPerLoad, IReadOnlyList<decimal>? MoistureSamples,
     bool Reject = false, [StringLength(300)] string? RejectReason = null, bool AcceptAboveMoistureLimit = false, decimal? PricePerTonne = null, Guid? StackId = null,
-    [StringLength(1000)] string? Notes = null);
+    [StringLength(1000)] string? Notes = null, bool TareLater = false);
 
 public sealed record WoodDeliveryDto(
     Guid Id, string DeliveryNumber, Guid FactoryId, string Factory, DateTime ReceivedAt, Guid? SupplierId, string Supplier, string SupplierPhone, string SupplierPaymentDetails,
     Guid? SpeciesId, string Species, string FuelForm, string? SourceArea, string? TransportPermit, string? SupplierNoteNumber, string VehicleRegistration, string? DriverName,
     string MeasureBasis, decimal? GrossKg, decimal? TareKg, decimal? StackedM3, decimal? Loads, decimal? KgPerLoad, decimal NetKg, decimal? AverageMoisturePct, IReadOnlyList<decimal> MoistureSamples,
     string Decision, string? DecisionReason, decimal RejectedKg, decimal DeductedKg, decimal PayableKg, decimal PricePerTonne, decimal PricePercent, decimal AmountPayable,
-    Guid? StackId, string Stack, string ReceivedBy, string? Notes);
+    Guid? StackId, string Stack, string ReceivedBy, string? Notes, Guid? VehicleMovementId = null);
+
+public sealed record WoodGateVehicle(Guid Id, string Registration, string? DriverName, string? DriverPhone, DateTime EnteredAt, string Purpose, string? Description,
+    string? DeliveryNumber, Guid? PendingDeliveryId, bool AwaitingTare, bool HasDelivery);
+
+public sealed record WeighOutRequest(decimal? TareKg, IReadOnlyList<decimal>? MoistureSamples = null, bool Reject = false, [StringLength(300)] string? RejectReason = null,
+    bool AcceptAboveMoistureLimit = false, decimal? PricePerTonne = null, Guid? StackId = null, [StringLength(1000)] string? Notes = null);
 
 public sealed record IssueWoodRequest(Guid FactoryId, Guid AssetId, Guid? StackId, decimal? Kg, decimal? Loads, decimal? KgPerLoad, [StringLength(30)] string? Shift = null, [StringLength(500)] string? Notes = null);
 public sealed record WoodIssueDto(Guid Id, Guid FactoryId, Guid AssetId, string Asset, Guid? StackId, string? Stack, DateTime IssuedAt, string? Shift, decimal Kg, string? Notes, string IssuedBy, bool OnMeter);

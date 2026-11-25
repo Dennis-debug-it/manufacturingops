@@ -35,6 +35,8 @@ public static class WoodDecisions
     public const string Accepted = "Accepted";
     public const string AcceptedWithDeduction = "AcceptedWithDeduction";
     public const string Rejected = "Rejected";
+    /// <summary>Gross weighed, tare not yet: the truck is still on the weighbridge. Nothing is in the ledger and nothing is payable.</summary>
+    public const string Pending = "Pending";
 }
 
 public static class FuelForms

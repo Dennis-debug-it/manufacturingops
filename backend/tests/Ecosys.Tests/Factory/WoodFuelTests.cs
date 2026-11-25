@@ -15,6 +15,8 @@ public sealed class WoodFuelTests
 {
     private static readonly WoodActor Clerk = new(Guid.NewGuid(), "Yard Clerk", false);
     private static readonly WoodActor Manager = new(Guid.NewGuid(), "Wood Manager", true);
+    private static readonly VisitActor GateOfficer = new(Guid.NewGuid(), "Gate Officer");
+    private static readonly VisitActor GateManager = new(Guid.NewGuid(), "Security Manager", true);
 
     // ------------------------------------------------------------------ the arithmetic
 
@@ -293,6 +295,117 @@ public sealed class WoodFuelTests
         Assert.Equal((6000m, 20m), (stackRow.Kg, stackRow.AverageMoisturePct));
         var supplier = Assert.Single(board.Suppliers);
         Assert.Equal(1, supplier.Deliveries);
+    }
+
+    // ------------------------------------------------------------------ the gate
+
+    [Fact]
+    public async Task ATruckWeighedInOnly_HoldsNothingInTheLedger_UntilItsTareIsWeighedOut()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var sent = new RecordingDispatcher();
+        var service = Service(db, sent);
+        var gate = new VehicleLogService(db);
+        var truck = await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.FactoryId, "kca 123a", "Delivery", "Peter Otieno"), GateOfficer);
+
+        var waiting = await service.ReceiveAsync(site.TenantId, Blank(site) with { VehicleMovementId = truck.Id, VehicleRegistration = null, DriverName = null, MeasureBasis = WoodMeasureBasis.Weighbridge, GrossKg = 12_500, TareLater = true, MoistureSamples = [30] }, Clerk);
+
+        Assert.Equal((WoodDecisions.Pending, 0m, 0m, 0m), (waiting.Decision, waiting.NetKg, waiting.PayableKg, waiting.AmountPayable));
+        Assert.Equal(("KCA123A", "Peter Otieno", truck.Id), (waiting.VehicleRegistration, waiting.DriverName, waiting.VehicleMovementId));
+        Assert.Null(waiting.TareKg);
+        Assert.Empty(db.WoodStockMovements);
+        Assert.Empty(sent.Sent);
+        Assert.Equal(1, (await service.SummaryAsync(site.TenantId, site.FactoryId, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1))).AwaitingTare);
+
+        var done = await service.CompleteAsync(site.TenantId, waiting.Id, new CompleteWoodDelivery(5_300, [32, 34], false, null, false, 5000m, site.StackId, null), Clerk);
+
+        Assert.Equal((7200m, 32m, WoodDecisions.AcceptedWithDeduction), (done.NetKg, done.AverageMoisturePct, done.Decision));
+        Assert.Equal(3, await db.WoodMoistureSamples.CountAsync());
+        Assert.Equal(7200m, await service.StockKgAsync(site.TenantId, site.FactoryId, site.StackId));
+        Assert.Equal(5_300m, done.TareKg);
+        Assert.True(done.AmountPayable > 0);
+        Assert.Equal(0, (await service.SummaryAsync(site.TenantId, site.FactoryId, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1))).AwaitingTare);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.CompleteAsync(site.TenantId, waiting.Id, new CompleteWoodDelivery(5_300, null, false, null, false, null, null, null), Clerk));
+    }
+
+    [Fact]
+    public async Task TheGate_HoldsATruckWhoseWoodIsNotWeighedOut_UntilItIs()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var service = Service(db);
+        var gate = new VehicleLogService(db);
+        var truck = await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.FactoryId, "KCA 123A", "Delivery"), GateOfficer);
+        var waiting = await service.ReceiveAsync(site.TenantId, Blank(site) with { VehicleMovementId = truck.Id, MeasureBasis = WoodMeasureBasis.Weighbridge, GrossKg = 12_500, TareLater = true }, Clerk);
+
+        var held = await Assert.ThrowsAsync<BusinessRuleException>(() => gate.ExitAsync(site.TenantId, truck.Id, null, GateOfficer));
+        Assert.Contains(waiting.DeliveryNumber, held.Message);
+        Assert.Null((await db.VehicleMovements.SingleAsync()).ExitedAt);
+
+        await service.CompleteAsync(site.TenantId, waiting.Id, new CompleteWoodDelivery(5_300, [20], false, null, false, null, site.StackId, null), Clerk);
+        Assert.NotNull((await gate.ExitAsync(site.TenantId, truck.Id, null, GateOfficer)).ExitedAt);
+    }
+
+    [Fact]
+    public async Task AVisitorManager_CanLetTheTruckGo_AndATurnedAwayTruckIsClosedWithNoTare()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var service = Service(db);
+        var gate = new VehicleLogService(db);
+
+        var first = await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.FactoryId, "KCA 123A", "Delivery"), GateOfficer);
+        await service.ReceiveAsync(site.TenantId, Blank(site) with { VehicleMovementId = first.Id, MeasureBasis = WoodMeasureBasis.Weighbridge, GrossKg = 9_000, TareLater = true }, Clerk);
+        Assert.NotNull((await gate.ExitAsync(site.TenantId, first.Id, "Manager let it go", GateManager)).ExitedAt);
+
+        var second = await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.FactoryId, "KDB 456B", "Delivery"), GateOfficer);
+        var turned = await service.ReceiveAsync(site.TenantId, Blank(site) with { VehicleMovementId = second.Id, MeasureBasis = WoodMeasureBasis.Weighbridge, GrossKg = 9_000, TareLater = true }, Clerk);
+        var closed = await service.CompleteAsync(site.TenantId, turned.Id, new CompleteWoodDelivery(null, null, true, "Wet and full of soil", false, null, null, null), Clerk);
+
+        Assert.Equal((WoodDecisions.Rejected, 0m, "Wet and full of soil"), (closed.Decision, closed.NetKg, closed.DecisionReason));
+        Assert.Empty(db.WoodStockMovements);
+        Assert.NotNull((await gate.ExitAsync(site.TenantId, second.Id, null, GateOfficer)).ExitedAt);
+    }
+
+    [Fact]
+    public async Task ALinkedVehicle_MustBeAtThisFactoryGate_AndATareCanOnlyWaitOnTheWeighbridge()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var service = Service(db);
+        var gate = new VehicleLogService(db);
+        var elsewhere = await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.OtherFactoryId, "KCA 123A", "Delivery"), GateOfficer);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.ReceiveAsync(site.TenantId, Weighed(site, 12_500, 5_300, [20]) with { VehicleMovementId = elsewhere.Id }, Clerk));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.ReceiveAsync(site.TenantId, Weighed(site, 12_500, 5_300, [20]) with { VehicleMovementId = Guid.NewGuid() }, Clerk));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.ReceiveAsync(site.TenantId, Blank(site) with { MeasureBasis = WoodMeasureBasis.LoadCount, Loads = 2, KgPerLoad = 2000, TareLater = true }, Clerk));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.ReceiveAsync(site.TenantId, Blank(site) with { MeasureBasis = WoodMeasureBasis.Weighbridge, TareLater = true }, Clerk));
+        Assert.Empty(db.WoodDeliveries);
+    }
+
+    [Fact]
+    public async Task TheClerk_SeesTrucksAtTheGate_AndTheGateRegisterShowsAWaitingDelivery()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var gate = new VehicleLogService(db);
+        var truck = await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.FactoryId, "KCA 123A", "Delivery", "Peter"), GateOfficer);
+        await gate.EnterAsync(site.TenantId, new NewVehicleEntry(site.FactoryId, "KDB 456B", "Visitor"), GateOfficer);
+        var clerk = Controller(db, site, PermissionNames.WoodFuelReceive);
+
+        var before = Assert.IsAssignableFrom<IReadOnlyList<WoodGateVehicle>>(((OkObjectResult)(await clerk.GateVehicles(site.FactoryId, default)).Result!).Value);
+        var listed = Assert.Single(before); // visitors' cars are not offered
+        Assert.Equal(("KCA123A", false), (listed.Registration, listed.AwaitingTare));
+
+        var made = (WoodDeliveryDto)((OkObjectResult)(await clerk.Receive(Request(site, 12_500, 5_300) with { VehicleMovementId = truck.Id, TareKg = null, TareLater = true }, default)).Result!).Value!;
+        Assert.Equal(WoodDecisions.Pending, made.Decision);
+        var after = Assert.Single(((IReadOnlyList<WoodGateVehicle>)((OkObjectResult)(await clerk.GateVehicles(site.FactoryId, default)).Result!).Value!));
+        Assert.Equal((true, made.Id), (after.AwaitingTare, after.PendingDeliveryId));
+
+        var weighed = (WoodDeliveryDto)((OkObjectResult)(await clerk.WeighOut(made.Id, new WeighOutRequest(5_300m, [20m], StackId: site.StackId), default)).Result!).Value!;
+        Assert.Equal(WoodDecisions.Accepted, weighed.Decision);
+        await Assert.ThrowsAsync<ForbiddenException>(() => Controller(db, site, PermissionNames.WoodFuelIssue).WeighOut(made.Id, new WeighOutRequest(5_300m), default));
     }
 
     // ------------------------------------------------------------------ alerts

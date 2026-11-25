@@ -69,12 +69,20 @@ public sealed class VisitorGateController(
                 x.EnteredAt, x.EnteredByName, x.ExitedAt, x.ExitedByName, x.Notes, x.ExitNotes,
             })
             .ToListAsync(cancellationToken);
+        // Wood deliveries recorded against these vehicles: a truck with one not weighed out is held at the gate.
+        var ids = rows.Select(x => x.Id).ToList();
+        var woodByVehicle = (await dbContext.WoodDeliveries.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.VehicleMovementId != null && ids.Contains(x.VehicleMovementId.Value))
+                .Select(x => new { Vehicle = x.VehicleMovementId!.Value, x.DeliveryNumber, x.Decision, x.CreatedAt }).ToListAsync(cancellationToken))
+            .GroupBy(x => x.Vehicle)
+            .ToDictionary(g => g.Key, g => (Number: g.OrderByDescending(x => x.CreatedAt).First().DeliveryNumber, Pending: g.Any(x => x.Decision == WoodDecisions.Pending)));
         return Ok(rows.Select(x => new VehicleMovementRow(
             x.Id, x.FactoryId, x.Factory, x.Registration, x.Purpose, x.Description, x.DriverName, x.DriverPhone, x.VisitId, x.VisitNumber,
             x.EnteredAt, x.EnteredByName, x.ExitedAt, x.ExitedByName, x.Notes, x.ExitNotes,
             (int)Math.Round(((x.ExitedAt ?? now) - x.EnteredAt).TotalMinutes),
             // Still inside although the visit it came with is over: the gate should look for it.
-            x.ExitedAt == null && x.VisitStatus is VisitStatuses.Completed or VisitStatuses.Cancelled)).ToList());
+            x.ExitedAt == null && x.VisitStatus is VisitStatuses.Completed or VisitStatuses.Cancelled,
+            woodByVehicle.TryGetValue(x.Id, out var wood) ? wood.Number : null, wood.Pending)).ToList());
     }
 
     [HttpPost("vehicles")]
@@ -357,7 +365,7 @@ public sealed class VisitorGateController(
 public sealed record VehicleMovementRow(
     Guid Id, Guid FactoryId, string FactoryName, string Registration, string Purpose, string? Description, string? DriverName, string? DriverPhone,
     Guid? VisitId, string? VisitNumber, DateTime EnteredAt, string EnteredByName, DateTime? ExitedAt, string? ExitedByName, string? Notes, string? ExitNotes,
-    int MinutesInside, bool VisitOver);
+    int MinutesInside, bool VisitOver, string? WoodDelivery = null, bool WoodPending = false);
 
 public sealed record VehicleEntryRequest(
     Guid FactoryId, string? Registration, string? Purpose = null, string? DriverName = null, string? DriverPhone = null, string? Description = null,

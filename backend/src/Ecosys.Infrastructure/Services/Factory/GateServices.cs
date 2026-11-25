@@ -63,6 +63,13 @@ internal sealed class VehicleLogService(AppDbContext dbContext) : IVehicleLogSer
         var movement = await dbContext.VehicleMovements.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == movementId, cancellationToken)
             ?? throw new NotFoundException("Vehicle entry not found.");
         if (movement.ExitedAt is not null) throw new BusinessRuleException($"{movement.Registration} already went out at {VisitorService.Local(movement.ExitedAt.Value):HH:mm}.");
+        // A truck that came with wood is held until its tare is weighed and the load decided. A visitor
+        // manager can let it go (the delivery then waits for the wood clerk or a wood fuel manager to close).
+        var waiting = await dbContext.WoodDeliveries.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.VehicleMovementId == movementId && x.Decision == WoodDecisions.Pending)
+            .Select(x => x.DeliveryNumber).FirstOrDefaultAsync(cancellationToken);
+        if (waiting is not null && !actor.CanManage)
+            throw new BusinessRuleException($"{movement.Registration} has wood delivery {waiting} that is not weighed out. The wood clerk must weigh the tare and decide the load before it leaves.");
         var at = OccurredAt.UtcNow;
         movement.ExitedAt = at < movement.EnteredAt ? movement.EnteredAt : at;
         movement.ExitedByName = actor.Name;
